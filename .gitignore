@@ -1,0 +1,4 @@
+nawasara-agent
+*.exe
+go.sum
+dist/

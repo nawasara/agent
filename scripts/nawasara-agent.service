@@ -1,0 +1,17 @@
+[Unit]
+Description=Nawasara Security Agent
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/nawasara-agent run --config /etc/nawasara-agent/config.yaml
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+CPUQuota=10%
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target
