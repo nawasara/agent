@@ -18,6 +18,7 @@ const nginxTimeLayout = "02/Jan/2006:15:04:05 -0700"
 
 type NginxCollector struct {
 	logPath string
+	source  string // "nginx" | "apache"
 	out     chan<- Event
 	tailer  *Tailer
 	lineCh  chan string
@@ -25,7 +26,7 @@ type NginxCollector struct {
 
 func NewNginxCollector(logPath string, out chan<- Event) *NginxCollector {
 	lineCh := make(chan string, 1000)
-	return &NginxCollector{logPath: logPath, out: out, lineCh: lineCh, tailer: NewTailer(logPath, lineCh)}
+	return &NginxCollector{logPath: logPath, source: "nginx", out: out, lineCh: lineCh, tailer: NewTailer(logPath, lineCh)}
 }
 
 func (c *NginxCollector) Start() {
@@ -83,7 +84,7 @@ func (c *NginxCollector) parse(line string) *LogEntry {
 		BytesSent:  bytes,
 		Referer:    m[7],
 		UserAgent:  m[8],
-		Source:     "nginx",
+		Source:     c.source,
 		Raw:        fmt.Sprintf("%s %s", m[3], rawPath),
 	}
 }

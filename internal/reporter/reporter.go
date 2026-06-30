@@ -15,7 +15,6 @@ import (
 	"github.com/nawasara/agent/internal/analyzer"
 	"github.com/nawasara/agent/internal/collector"
 	"github.com/nawasara/agent/internal/config"
-	"github.com/nawasara/agent/internal/health"
 )
 
 type Reporter struct {
@@ -160,8 +159,3 @@ var (
 	Version   = "0.1.0"
 	startTime = time.Now()
 )
-
-// HealthScorer calculates health score from metrics.
-func HealthScore(m *collector.SystemMetrics, recentCritical, recentHigh int) float64 {
-	return health.Calculate(m.CPUPercent, float64(m.MemUsedMB)/float64(m.MemTotalMB)*100, m.DiskUsedPct, recentCritical, recentHigh)
-}

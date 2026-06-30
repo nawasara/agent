@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/nawasara/agent/internal/analyzer"
 	"github.com/nawasara/agent/internal/collector"
 	"github.com/nawasara/agent/internal/config"
+	"github.com/nawasara/agent/internal/health"
+	"github.com/nawasara/agent/internal/plugin"
 	"github.com/nawasara/agent/internal/reporter"
 )
 
@@ -43,7 +46,24 @@ func main() {
 		},
 	}
 
-	root.AddCommand(runCmd, versionCmd)
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show agent status (reads config, checks service)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(cfgPath)
+			if err != nil {
+				return err
+			}
+			log.Printf("agent_id:      %s", cfg.AgentID)
+			log.Printf("agent_name:    %s", cfg.AgentName)
+			log.Printf("dashboard_url: %s", cfg.DashboardURL)
+			log.Printf("plugins:       %v", cfg.Plugins.Enabled)
+			return nil
+		},
+	}
+	statusCmd.Flags().StringVarP(&cfgPath, "config", "c", "/etc/nawasara-agent/config.yaml", "config file path")
+
+	root.AddCommand(runCmd, versionCmd, statusCmd)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -55,21 +75,24 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
 	if cfg.APIKey == "" {
-		log.Fatal("api_key not set in config")
+		log.Fatal("api_key not set in config — edit /etc/nawasara-agent/config.yaml")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Shared event bus: all collectors → single channel
+	// Plugin manager
+	plugins := plugin.NewManager(cfg.Plugins.Dir, cfg.Plugins.Enabled)
+	plugins.Load()
+
+	// Shared event bus: all collectors → single buffered channel
 	eventBus := make(chan collector.Event, 10_000)
 
 	// Incident channel: analyzer → reporter
 	incidentCh := make(chan analyzer.Incident, 1_000)
 
-	// Load rules: try rules_dir first, fall back to built-in defaults
+	// Load rules
 	rules, err := analyzer.LoadRules(cfg.Analyzer.RulesDir)
 	if err != nil || len(rules) == 0 {
 		if debug {
@@ -77,44 +100,50 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		}
 		rules = analyzer.DefaultRules()
 	}
-	log.Printf("loaded %d rules", len(rules))
+	log.Printf("loaded %d detection rules", len(rules))
 
-	// Analyzer engine
 	engine := analyzer.NewEngine(rules, cfg.Analyzer.CorrelationWindow, incidentCh)
 
-	// Start collectors based on config
-	var collectors []interface{ Stop() }
+	// Start collectors
+	var (
+		stopFns []func()
+		wg      sync.WaitGroup
+	)
+
+	startCollector := func(name string, start func(), stop func()) {
+		start()
+		stopFns = append(stopFns, stop)
+		log.Printf("[collector] %s started", name)
+	}
 
 	webServer := cfg.Collector.WebServer
 	if webServer == "auto" {
 		webServer = detectWebServer()
 	}
-
 	switch webServer {
 	case "nginx":
 		c := collector.NewNginxCollector(cfg.Collector.LogPaths.Nginx.Access, eventBus)
-		c.Start()
-		collectors = append(collectors, c)
-		log.Printf("nginx collector started: %s", cfg.Collector.LogPaths.Nginx.Access)
+		startCollector("nginx:"+cfg.Collector.LogPaths.Nginx.Access, c.Start, c.Stop)
 	case "apache":
-		c := collector.NewNginxCollector(cfg.Collector.LogPaths.Apache.Access, eventBus) // same format
-		c.Start()
-		collectors = append(collectors, c)
-		log.Printf("apache collector started: %s", cfg.Collector.LogPaths.Apache.Access)
+		c := collector.NewApacheCollector(cfg.Collector.LogPaths.Apache.Access, eventBus)
+		startCollector("apache:"+cfg.Collector.LogPaths.Apache.Access, c.Start, c.Stop)
 	}
 
-	sshLog := cfg.Collector.SSHLog
-	if sshLog == "auto" {
-		sshLog = detectSSHLog()
-	}
-	if sshLog != "" {
-		c := collector.NewSSHCollector(sshLog, eventBus)
-		c.Start()
-		collectors = append(collectors, c)
-		log.Printf("ssh collector started: %s", sshLog)
+	if plugins.IsEnabled("ssh") {
+		sshLog := cfg.Collector.SSHLog
+		if sshLog == "auto" {
+			sshLog = detectSSHLog()
+		}
+		if sshLog != "" {
+			c := collector.NewSSHCollector(sshLog, eventBus)
+			startCollector("ssh:"+sshLog, c.Start, c.Stop)
+		}
 	}
 
-	// Reporter (with SQLite buffer)
+	metricsC := collector.NewMetricsCollector(cfg.Collector.MetricsInterval, eventBus)
+	startCollector("metrics", metricsC.Start, metricsC.Stop)
+
+	// Reporter
 	rep, err := reporter.New(cfg)
 	if err != nil {
 		return err
@@ -123,8 +152,19 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	go rep.RetryLoop(ctx)
 
-	// Main event dispatch loop
+	// Latest metrics for heartbeat
+	var (
+		latestMetrics     = &collector.SystemMetrics{}
+		latestMetricsMu   sync.Mutex
+		recentCritical    int
+		recentHigh        int
+		recentIncidentsMu sync.Mutex
+	)
+
+	// Event dispatch
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
@@ -135,65 +175,96 @@ func runAgent(cmd *cobra.Command, args []string) error {
 					engine.ProcessLog(ev.Log)
 				case collector.EventSSH:
 					engine.ProcessSSH(ev.SSH)
+				case collector.EventMetrics:
+					latestMetricsMu.Lock()
+					latestMetrics = ev.Metrics
+					latestMetricsMu.Unlock()
 				}
 			}
 		}
 	}()
 
 	// Incident → reporter
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case inc := <-incidentCh:
-				log.Printf("[%s] incident: %s from %s (score=%d)", inc.Severity, inc.Type, inc.SourceIP, inc.Score)
+				log.Printf("[%s] %s from %s (score=%d)", inc.Severity, inc.Type, inc.SourceIP, inc.Score)
+				recentIncidentsMu.Lock()
+				switch inc.Severity {
+				case analyzer.SeverityCritical:
+					recentCritical++
+				case analyzer.SeverityHigh:
+					recentHigh++
+				}
+				recentIncidentsMu.Unlock()
 				rep.Send(inc)
 			}
 		}
 	}()
 
-	// Heartbeat loop
+	// Heartbeat
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		ticker := time.NewTicker(cfg.Reporter.HeartbeatInterval)
 		defer ticker.Stop()
+		// Reset recent incident counters every hour
+		resetTicker := time.NewTicker(time.Hour)
+		defer resetTicker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case <-resetTicker.C:
+				recentIncidentsMu.Lock()
+				recentCritical, recentHigh = 0, 0
+				recentIncidentsMu.Unlock()
 			case <-ticker.C:
-				metrics := &collector.SystemMetrics{Timestamp: time.Now()}
-				rep.SendHeartbeat(metrics, cfg.Plugins.Enabled, rep.PendingCount(), 100)
+				latestMetricsMu.Lock()
+				m := latestMetrics
+				latestMetricsMu.Unlock()
+				recentIncidentsMu.Lock()
+				rc, rh := recentCritical, recentHigh
+				recentIncidentsMu.Unlock()
+				score := health.Calculate(m.CPUPercent, float64(m.MemUsedMB)/float64(max(m.MemTotalMB, 1))*100, m.DiskUsedPct, rc, rh)
+				rep.SendHeartbeat(m, plugins.Active(), rep.PendingCount(), score)
 			}
 		}
 	}()
 
-	log.Printf("nawasara-agent %s started (agent_id=%s dashboard=%s)", reporter.Version, cfg.AgentID, cfg.DashboardURL)
-	<-ctx.Done()
+	log.Printf("nawasara-agent %s started (agent=%s dashboard=%s plugins=%v)",
+		reporter.Version, cfg.AgentName, cfg.DashboardURL, plugins.Active())
 
-	log.Println("shutting down...")
-	for _, c := range collectors {
-		c.Stop()
+	<-ctx.Done()
+	log.Println("shutting down collectors...")
+	for _, stop := range stopFns {
+		stop()
 	}
+	wg.Wait()
+	log.Println("stopped.")
 	return nil
 }
 
 func detectWebServer() string {
-	if fileExists("/var/log/nginx/access.log") || fileExists("/etc/nginx/nginx.conf") {
+	switch {
+	case fileExists("/var/log/nginx/access.log") || fileExists("/etc/nginx/nginx.conf"):
+		return "nginx"
+	case fileExists("/var/log/apache2/access.log") || fileExists("/etc/apache2/apache2.conf"):
+		return "apache"
+	case fileExists("/var/log/httpd/access_log") || fileExists("/etc/httpd/conf/httpd.conf"):
+		return "apache"
+	default:
 		return "nginx"
 	}
-	if fileExists("/var/log/apache2/access.log") || fileExists("/etc/apache2/apache2.conf") {
-		return "apache"
-	}
-	if fileExists("/var/log/httpd/access_log") || fileExists("/etc/httpd/conf/httpd.conf") {
-		return "apache"
-	}
-	return "nginx" // default
 }
 
 func detectSSHLog() string {
-	candidates := []string{"/var/log/auth.log", "/var/log/secure"}
-	for _, p := range candidates {
+	for _, p := range []string{"/var/log/auth.log", "/var/log/secure"} {
 		if fileExists(p) {
 			return p
 		}
@@ -204,4 +275,11 @@ func detectSSHLog() string {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func max(a, b uint64) uint64 {
+	if a > b {
+		return a
+	}
+	return b
 }
