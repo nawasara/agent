@@ -17,6 +17,7 @@ import (
 	"github.com/nawasara/agent/internal/analyzer"
 	"github.com/nawasara/agent/internal/collector"
 	"github.com/nawasara/agent/internal/config"
+	agentexec "github.com/nawasara/agent/internal/executor"
 	"github.com/nawasara/agent/internal/health"
 	"github.com/nawasara/agent/internal/plugin"
 	"github.com/nawasara/agent/internal/reporter"
@@ -183,6 +184,43 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	startCollector("metrics", metricsC.Start, metricsC.Stop)
 
 	go rep.RetryLoop(ctx)
+
+	// Executor (Phase 2) — polls Dashboard for admin-approved commands
+	if cfg.Executor.Enabled {
+		ex := agentexec.New(cfg)
+		go ex.Run(ctx)
+	}
+
+	// Phase 2 plugins: ssl, docker, laravel
+	if plugins.IsEnabled("ssl") && len(cfg.Plugins.SSL.Hosts) > 0 {
+		sslPlugin := plugin.NewSSLPlugin(cfg.Plugins.SSL.Hosts, incidentCh)
+		if cfg.Plugins.SSL.CheckInterval > 0 {
+			sslPlugin.CheckInterval = cfg.Plugins.SSL.CheckInterval
+		}
+		if cfg.Plugins.SSL.WarnDays > 0 {
+			sslPlugin.WarnDays = cfg.Plugins.SSL.WarnDays
+		}
+		if cfg.Plugins.SSL.CritDays > 0 {
+			sslPlugin.CritDays = cfg.Plugins.SSL.CritDays
+		}
+		go sslPlugin.Run(ctx)
+		log.Printf("[collector] ssl plugin started (hosts=%d)", len(cfg.Plugins.SSL.Hosts))
+	}
+
+	if plugins.IsEnabled("docker") {
+		dockerPlugin := plugin.NewDockerPlugin(incidentCh)
+		if cfg.Plugins.Docker.CheckInterval > 0 {
+			dockerPlugin.CheckInterval = cfg.Plugins.Docker.CheckInterval
+		}
+		go dockerPlugin.Run(ctx)
+		log.Printf("[collector] docker plugin started")
+	}
+
+	if plugins.IsEnabled("laravel") {
+		laravelPlugin := plugin.NewLaravelPlugin(cfg.Plugins.Laravel.LogPaths, incidentCh)
+		go laravelPlugin.Run(ctx)
+		log.Printf("[collector] laravel plugin started")
+	}
 
 	// Latest metrics for heartbeat
 	var (

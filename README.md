@@ -160,6 +160,95 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 
 Requires Go 1.23+.
 
+## Phase 2 — Executor (Remote Actions)
+
+When `executor.enabled: true`, the agent polls `GET /api/agent/commands/pending` every 30 seconds and executes approved commands.
+
+**All commands require admin approval on the Dashboard before being sent to the agent.** The agent also enforces its own allowlist — any command not in `executor.allowed_actions` is refused regardless of Dashboard approval.
+
+Enable in config:
+
+```yaml
+executor:
+  enabled: true
+  poll_interval: 30s
+  allowed_actions:
+    - block_ip
+    - unblock_ip
+    - restart_nginx
+    - restart_php_fpm
+    - artisan_queue_restart
+    - artisan_optimize_clear
+```
+
+Available actions:
+
+| Action | Description |
+|---|---|
+| `block_ip` | Add IP to iptables/nftables INPUT DROP (params: `ip`) |
+| `unblock_ip` | Remove IP from block (params: `ip`) |
+| `restart_nginx` | `systemctl restart nginx` |
+| `reload_nginx` | `systemctl reload nginx` |
+| `restart_apache` | `systemctl restart apache2/httpd` |
+| `reload_apache` | `systemctl reload apache2/httpd` |
+| `restart_php_fpm` | `systemctl restart php*-fpm` (auto-detects version) |
+| `reload_php_fpm` | `systemctl reload php*-fpm` |
+| `restart_mysql` | `systemctl restart mysql/mysqld/mariadb` |
+| `artisan_queue_restart` | `php artisan queue:restart` |
+| `artisan_optimize_clear` | `php artisan optimize:clear` |
+
+## Phase 2 — Plugins
+
+Enable additional monitoring plugins via `plugins.enabled`:
+
+### SSL Certificate Monitor (`ssl`)
+
+Probes TLS certificate expiry on configured hostnames.
+
+```yaml
+plugins:
+  enabled:
+    - nginx
+    - ssh
+    - ssl
+  ssl:
+    hosts:
+      - nawasara.ponorogo.go.id
+      - app.ponorogo.go.id:8443
+    check_interval: 12h
+    warn_days: 30    # emit "high" incident
+    crit_days: 7     # emit "critical" incident
+```
+
+### Docker Monitor (`docker`)
+
+Monitors container health via `docker events` (real-time) and periodic `docker ps` snapshots. Emits incidents for OOM kills, non-zero exits, and unhealthy health checks.
+
+```yaml
+plugins:
+  enabled:
+    - nginx
+    - ssh
+    - docker
+  docker:
+    check_interval: 5m
+```
+
+### Laravel Log Monitor (`laravel`)
+
+Tails Laravel log files and emits incidents for `EMERGENCY`, `ALERT`, `CRITICAL` entries, and significant `ERROR` patterns (DB exceptions, OOM, class not found). Auto-detects common log paths.
+
+```yaml
+plugins:
+  enabled:
+    - nginx
+    - ssh
+    - laravel
+  laravel:
+    log_paths:  # empty = auto-detect
+      - /var/www/html/storage/logs/laravel.log
+```
+
 ## Architecture
 
 ```
@@ -178,9 +267,18 @@ analyzer/           Match events against rules, emit incidents
 reporter/           Send incidents and heartbeats to Dashboard
   reporter.go       HTTP POST with SQLite offline buffer + retry loop
 
+executor/           Phase 2 — poll + execute admin-approved commands
+  executor.go       Poll loop, allowlist enforcement, result reporting
+  actions.go        block_ip (iptables/nftables), systemctl, artisan
+
+plugin/             Plugin manager + runtime plugins
+  manager.go        Plugin loader from YAML files
+  ssl.go            TLS cert expiry monitor
+  docker.go         Container health via docker events + docker ps
+  laravel.go        Laravel log tailer (CRITICAL/ERROR patterns)
+
 health/             Calculate agent health score (0-100)
 config/             YAML config load + Save() for agent_id persist
-plugin/             Plugin manager (Phase 2)
 ```
 
 ## Uninstall

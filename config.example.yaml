@@ -114,7 +114,38 @@ plugins:
   dir: /etc/nawasara-agent/plugins/available/
 
   # Plugins to activate. Built-in plugins (nginx, ssh) don't need a YAML file.
-  # Additional plugins can be installed to the plugins dir and listed here.
+  # Phase 2 plugins: ssl, docker, laravel
+  # Add to this list to activate.
   enabled:
     - nginx
     - ssh
+    # - ssl
+    # - docker
+    # - laravel
+
+  # ── SSL Certificate Monitor ──────────────────────────────────────────────────
+  ssl:
+    # Hostnames to probe (port 443 assumed unless host:port specified).
+    hosts: []
+      # - nawasara.ponorogo.go.id
+      # - app.ponorogo.go.id:8443
+
+    # How often to check certificates.
+    check_interval: 12h
+
+    # Emit "high" incident when cert expires within this many days.
+    warn_days: 30
+
+    # Emit "critical" incident when cert expires within this many days.
+    crit_days: 7
+
+  # ── Docker Container Monitor ─────────────────────────────────────────────────
+  docker:
+    # How often to snapshot container health (in addition to real-time events).
+    check_interval: 5m
+
+  # ── Laravel Log Monitor ──────────────────────────────────────────────────────
+  laravel:
+    # Paths to Laravel log files. Empty = auto-detect common locations.
+    log_paths: []
+      # - /var/www/html/storage/logs/laravel.log

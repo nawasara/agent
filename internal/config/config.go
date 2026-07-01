@@ -68,8 +68,26 @@ type ExecutorConfig struct {
 }
 
 type PluginsConfig struct {
-	Dir     string   `yaml:"dir"`
-	Enabled []string `yaml:"enabled"`
+	Dir     string       `yaml:"dir"`
+	Enabled []string     `yaml:"enabled"`
+	SSL     SSLConfig    `yaml:"ssl"`
+	Laravel LaravelPluginConfig `yaml:"laravel"`
+	Docker  DockerPluginConfig  `yaml:"docker"`
+}
+
+type SSLConfig struct {
+	Hosts         []string      `yaml:"hosts"`
+	CheckInterval time.Duration `yaml:"check_interval"`
+	WarnDays      int           `yaml:"warn_days"`
+	CritDays      int           `yaml:"crit_days"`
+}
+
+type LaravelPluginConfig struct {
+	LogPaths []string `yaml:"log_paths"`
+}
+
+type DockerPluginConfig struct {
+	CheckInterval time.Duration `yaml:"check_interval"`
 }
 
 func Load(path string) (*Config, error) {
@@ -145,6 +163,14 @@ func defaults() *Config {
 		Plugins: PluginsConfig{
 			Dir:     "/etc/nawasara-agent/plugins/available/",
 			Enabled: []string{"nginx", "ssh"},
+			SSL: SSLConfig{
+				CheckInterval: 12 * time.Hour,
+				WarnDays:      30,
+				CritDays:      7,
+			},
+			Docker: DockerPluginConfig{
+				CheckInterval: 5 * time.Minute,
+			},
 		},
 	}
 }
