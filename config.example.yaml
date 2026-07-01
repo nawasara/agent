@@ -1,0 +1,120 @@
+# Nawasara Agent — example configuration
+# Copy to /etc/nawasara-agent/config.yaml and edit before running.
+# The install script (scripts/install.sh) generates this automatically.
+
+# ─── Identity ────────────────────────────────────────────────────────────────
+
+# API key issued by the Dashboard on registration.
+# Set empty when agent_id is also empty — agent will self-register on first run.
+api_key: ""
+
+# Dashboard URL (no trailing slash).
+dashboard_url: https://nawasara.ponorogo.go.id
+
+# Human-readable name shown in the Dashboard agents list.
+agent_name: web-01
+
+# Unique ID assigned by the Dashboard on registration. Leave empty on first run;
+# the agent writes it here automatically after successful registration.
+agent_id: ""
+
+# ─── Collector ───────────────────────────────────────────────────────────────
+
+collector:
+  # Web server to collect access logs from.
+  # "auto" detects nginx/apache by checking known log/config paths.
+  # Options: auto | nginx | apache
+  web_server: auto
+
+  # SSH auth log path.
+  # "auto" tries /var/log/auth.log (Debian/Ubuntu) then /var/log/secure (RHEL/CentOS).
+  # Set explicit path if your distro uses a different location.
+  ssh_log: auto
+
+  # How often to sample CPU/memory/disk metrics for heartbeat.
+  metrics_interval: 30s
+
+  log_paths:
+    nginx:
+      # Main access log (Combined Log Format).
+      access: /var/log/nginx/access.log
+      error:  /var/log/nginx/error.log
+      # Glob pattern for per-vhost access logs. New files matching the pattern
+      # are picked up automatically every 30 seconds.
+      vhosts: /var/log/nginx/*_access.log
+
+    apache:
+      access: /var/log/apache2/access.log
+      error:  /var/log/apache2/error.log
+
+# ─── Analyzer ────────────────────────────────────────────────────────────────
+
+analyzer:
+  # Directory containing custom rule YAML files.
+  # If empty or the directory doesn't exist, built-in default rules are used.
+  rules_dir: /etc/nawasara-agent/rules/
+
+  # How often to reload rules from rules_dir (for hot-reloading custom rules).
+  rules_sync_interval: 6h
+
+  # Sliding time window for per-IP score accumulation.
+  # Scores older than this are forgotten (old attack attempts discarded).
+  correlation_window: 5m
+
+  # Default score threshold to emit an incident when a rule has no explicit threshold.
+  default_threshold: 20
+
+# ─── Reporter ────────────────────────────────────────────────────────────────
+
+reporter:
+  # HTTP timeout for pushing incidents/heartbeat to the Dashboard.
+  push_timeout: 10s
+
+  # How often to retry buffered incidents when the Dashboard is unreachable.
+  retry_interval: 30s
+
+  # SQLite buffer database path.
+  # Incidents are written here when the Dashboard is down and retried automatically.
+  buffer_db: /var/lib/nawasara-agent/buffer.db
+
+  # Maximum age of buffered incidents before they are pruned.
+  buffer_max_age: 168h  # 7 days
+
+  # Maximum size of the buffer database before oldest records are pruned.
+  buffer_max_size_mb: 100
+
+  # How often to send a heartbeat ping to the Dashboard.
+  # The Dashboard marks an agent offline if no heartbeat is received for 3 minutes.
+  heartbeat_interval: 60s
+
+# ─── Executor (Phase 2 — disabled in Phase 1) ────────────────────────────────
+
+executor:
+  # Set to true in Phase 2 to enable admin-approved remote actions.
+  enabled: false
+
+  # How often to poll the Dashboard for pending commands.
+  poll_interval: 30s
+
+  # Explicit allowlist of commands the agent is permitted to execute.
+  # The agent refuses any command not in this list even if executor.enabled = true.
+  allowed_actions:
+    - block_ip
+    - unblock_ip
+    - restart_nginx
+    - restart_apache
+    - restart_php_fpm
+    - artisan_queue_restart
+    - artisan_optimize_clear
+
+# ─── Plugins ─────────────────────────────────────────────────────────────────
+
+plugins:
+  # Directory containing available plugin definitions (YAML files).
+  dir: /etc/nawasara-agent/plugins/available/
+
+  # Plugins to activate. Built-in plugins (nginx, ssh) don't need a YAML file.
+  # Additional plugins can be installed to the plugins dir and listed here.
+  enabled:
+    - nginx
+    - ssh
