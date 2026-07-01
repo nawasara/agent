@@ -1,3 +1,5 @@
+//go:build linux
+
 package collector
 
 import (
@@ -5,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -53,12 +56,10 @@ func (c *MetricsCollector) collect() *SystemMetrics {
 	return m
 }
 
-// readCPU reads two /proc/stat samples 200ms apart and returns usage %.
 func readCPU() float64 {
 	s1 := readCPUStat()
 	time.Sleep(200 * time.Millisecond)
 	s2 := readCPUStat()
-
 	total := float64((s2[0] - s1[0]) + (s2[1] - s1[1]) + (s2[2] - s1[2]) + (s2[3] - s1[3]))
 	idle := float64(s2[3] - s1[3])
 	if total == 0 {
@@ -67,7 +68,6 @@ func readCPU() float64 {
 	return (1 - idle/total) * 100
 }
 
-// readCPUStat returns [user, nice, system, idle] from /proc/stat first cpu line.
 func readCPUStat() [4]uint64 {
 	f, err := os.Open("/proc/stat")
 	if err != nil {
@@ -99,7 +99,6 @@ func readMem() (usedMB, totalMB uint64) {
 		return 0, 0
 	}
 	defer f.Close()
-
 	var total, available uint64
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
@@ -116,19 +115,20 @@ func readMem() (usedMB, totalMB uint64) {
 			available = val
 		}
 	}
-	used := total - available
-	return used / 1024, total / 1024 // kB → MB
+	return (total - available) / 1024, total / 1024
 }
 
 func readDisk(path string) float64 {
-	// Use /proc/mounts + /proc/self/mountinfo is complex; simpler: statfs syscall.
-	// For portability we parse df output via /proc — instead use a direct approach.
-	// On Linux, read from /proc/self/mounts and use syscall.Statfs.
-	// Simplified: read /proc/diskstats is for IO, not space.
-	// We'll use a minimal statfs-like read from /proc/mounts sizes.
-	// For now return 0 — real implementation needs syscall.Statfs which requires CGO or unsafe.
-	// TODO: implement via syscall.Statfs when building on Linux.
-	return 0
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0
+	}
+	total := stat.Blocks * uint64(stat.Bsize)
+	free := stat.Bfree * uint64(stat.Bsize)
+	if total == 0 {
+		return 0
+	}
+	return float64(total-free) / float64(total) * 100
 }
 
 func readLoadAvg() (load1, load5 float64) {

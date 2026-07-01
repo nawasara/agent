@@ -101,20 +101,37 @@ chmod 600 "$CONFIG"
 info "Config written: $CONFIG"
 
 # Register agent with Dashboard
+# /api/agent/register is an open endpoint (no auth needed — api_key is returned by this call)
 info "Registering agent with Dashboard..."
-HOSTNAME=$(hostname)
+HOSTNAME_FULL=$(hostname -f 2>/dev/null || hostname)
 OS_FULL=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d'"' -f2 || echo "$OS")
+IP_LOCAL=$(hostname -I 2>/dev/null | awk '{print $1}')
 REG_RESPONSE=$(curl -s -X POST "$DASHBOARD_URL/api/agent/register" \
-  -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"hostname\":\"$HOSTNAME\",\"os\":\"$OS_FULL\",\"arch\":\"$ARCH\",\"agent_version\":\"$AGENT_VERSION\",\"web_server\":\"$WEB_SERVER\",\"ip_local\":\"$(hostname -I | awk '{print $1}')\"}" 2>/dev/null || true)
+  -d "{
+    \"name\":\"$AGENT_NAME\",
+    \"hostname\":\"$HOSTNAME_FULL\",
+    \"os\":\"$OS_FULL\",
+    \"arch\":\"$ARCH\",
+    \"agent_version\":\"$AGENT_VERSION\",
+    \"web_server\":\"$WEB_SERVER\",
+    \"ip_local\":\"$IP_LOCAL\"
+  }" 2>/dev/null || true)
 
 AGENT_ID=$(echo "$REG_RESPONSE" | grep -o '"agent_id":"[^"]*"' | cut -d'"' -f4)
-if [ -n "$AGENT_ID" ]; then
-  sed -i "s/agent_id: \"\"/agent_id: $AGENT_ID/" "$CONFIG"
+NEW_API_KEY=$(echo "$REG_RESPONSE" | grep -o '"api_key":"[^"]*"' | cut -d'"' -f4)
+
+if [ -n "$AGENT_ID" ] && [ -n "$NEW_API_KEY" ]; then
+  # Update config with credentials returned by registration
+  sed -i "s|^api_key: .*|api_key: $NEW_API_KEY|" "$CONFIG"
+  sed -i "s|^agent_id: .*|agent_id: $AGENT_ID|" "$CONFIG"
+  chmod 600 "$CONFIG"
   info "Registered: agent_id=$AGENT_ID"
+  info "API key saved to config (keep this file secure — key will not be shown again)"
 else
-  warn "Registration failed — agent will retry on first start. Response: $REG_RESPONSE"
+  warn "Registration failed. Check that $DASHBOARD_URL is reachable."
+  warn "Response: $REG_RESPONSE"
+  warn "You can register manually: curl -X POST $DASHBOARD_URL/api/agent/register -H 'Content-Type: application/json' -d '{\"name\":\"$AGENT_NAME\",...}'"
 fi
 
 # Install systemd service

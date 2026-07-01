@@ -44,11 +44,10 @@ func New(cfg *config.Config) (*Reporter, error) {
 	}, nil
 }
 
-// Send tries to POST incident to Dashboard. Buffers to SQLite on failure.
+// Send tries to POST an incident batch to Dashboard. Buffers to SQLite on failure.
 func (r *Reporter) Send(inc analyzer.Incident) {
 	payload, err := json.Marshal(map[string]any{
-		"agent_id": r.cfg.AgentID,
-		"incident": inc,
+		"incidents": []map[string]any{incidentToMap(inc)},
 	})
 	if err != nil {
 		log.Printf("reporter: marshal error: %v", err)
@@ -56,6 +55,7 @@ func (r *Reporter) Send(inc analyzer.Incident) {
 	}
 	if err := r.post("/api/agent/incidents", payload); err != nil {
 		log.Printf("reporter: send failed, buffering: %v", err)
+		// Buffer as single-item batch so flush() can re-POST directly
 		r.buffer(inc.ID, payload)
 	}
 }
@@ -63,15 +63,14 @@ func (r *Reporter) Send(inc analyzer.Incident) {
 // SendHeartbeat posts a heartbeat to the Dashboard.
 func (r *Reporter) SendHeartbeat(metrics *collector.SystemMetrics, plugins []string, pendingCount int, score float64) {
 	payload, _ := json.Marshal(map[string]any{
-		"agent_id":          r.cfg.AgentID,
-		"version":           Version,
+		"agent_version":     Version,
 		"uptime_seconds":    int(time.Since(startTime).Seconds()),
 		"pending_incidents": pendingCount,
 		"plugins_active":    plugins,
 		"health_score":      score,
 		"metrics": map[string]any{
-			"cpu_percent":      metrics.CPUPercent,
-			"mem_used_mb":      metrics.MemUsedMB,
+			"cpu_percent":       metrics.CPUPercent,
+			"mem_used_mb":       metrics.MemUsedMB,
 			"disk_used_percent": metrics.DiskUsedPct,
 		},
 	})
@@ -132,7 +131,9 @@ func (r *Reporter) post(path string, body []byte) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+r.cfg.APIKey)
+	// API authenticates via X-Agent-Key + X-Agent-Id headers (not Bearer token)
+	req.Header.Set("X-Agent-Key", r.cfg.APIKey)
+	req.Header.Set("X-Agent-Id", r.cfg.AgentID)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := r.client.Do(req)
 	if err != nil {
@@ -153,6 +154,28 @@ func (r *Reporter) PendingCount() int {
 
 func (r *Reporter) Close() {
 	r.db.Close()
+}
+
+func incidentToMap(inc analyzer.Incident) map[string]any {
+	evidence := make([]map[string]any, len(inc.Evidence))
+	for i, e := range inc.Evidence {
+		evidence[i] = map[string]any{
+			"timestamp":    e.Timestamp,
+			"raw":          e.Raw,
+			"matched_rule": e.MatchedRule,
+		}
+	}
+	return map[string]any{
+		"incident_id":         inc.ID,
+		"type":                inc.Type,
+		"severity":            string(inc.Severity),
+		"source_ip":           inc.SourceIP,
+		"score":               inc.Score,
+		"correlated":          inc.Correlated,
+		"correlated_group_id": inc.CorrelatedGroupID,
+		"evidence":            evidence,
+		"detected_at":         inc.DetectedAt.Format(time.RFC3339),
+	}
 }
 
 var (
