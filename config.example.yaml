@@ -149,3 +149,35 @@ plugins:
     # Paths to Laravel log files. Empty = auto-detect common locations.
     log_paths: []
       # - /var/www/html/storage/logs/laravel.log
+
+# ─── Scanner (Phase 3 — File Scanner & CVE Database) ────────────────────────
+
+scanner:
+  # Enable the file scanner. Off by default — enable on VMs that host web files.
+  enabled: false
+
+  # How often to run a full scan of web_dirs.
+  # 6h is a good balance for production — lower for faster detection (uses more I/O).
+  scan_interval: 6h
+
+  # Web directories to scan recursively for webshells and backdoors.
+  # Globs are supported (e.g. /home/*/public_html).
+  web_dirs:
+    - /var/www
+    - /home/*/public_html
+
+  # Critical file paths to monitor for unexpected modifications.
+  # Any hash change triggers a "file_integrity_modified" incident.
+  watch_paths:
+    - /var/www/html/.env
+    - /var/www/html/composer.json
+    - /etc/nawasara-agent/config.yaml
+
+  # Path to a custom signature database (JSON).
+  # Empty = use built-in signatures (webshells, backdoors, exploit artifacts).
+  # The Dashboard can push updated signatures to this path automatically.
+  signatures_db: ""  # e.g. /var/lib/nawasara-agent/signatures.json
+
+  # SQLite database for file hash baselines (file integrity).
+  # Populated on the first scan; subsequent scans compare against this baseline.
+  hash_db: /var/lib/nawasara-agent/hashes.db

@@ -249,6 +249,43 @@ plugins:
       - /var/www/html/storage/logs/laravel.log
 ```
 
+## Phase 3 — File Scanner & CVE Database
+
+When `scanner.enabled: true`, the agent runs a full filesystem scan every `scan_interval` (default: 6h).
+
+### What it detects
+
+| Category | Signatures |
+|---|---|
+| **Webshell** | c99, r57, WSO, b374k, IndoXploit, Priv8, mini PHP shell, generic upload shell |
+| **Backdoor** | `eval(base64_decode(...))`, hex-encoded eval, `create_function()`, `system/exec` from user input, file write dropper |
+| **Exploit Artifact** | WP File Manager CVE-2020-25213, phpMyAdmin LFI, Log4Shell JNDI payloads |
+| **File Integrity** | `.env`, `composer.json`, `wp-config.php` — any hash change triggers an incident |
+
+Enable in config:
+
+```yaml
+scanner:
+  enabled: true
+  scan_interval: 6h
+  web_dirs:
+    - /var/www
+    - /home/*/public_html
+  watch_paths:
+    - /var/www/html/.env
+    - /var/www/html/composer.json
+  hash_db: /var/lib/nawasara-agent/hashes.db
+  signatures_db: ""  # empty = built-in signatures
+```
+
+Findings are pushed to `POST /api/agent/scan-findings` on the Dashboard and visible in the agent detail page.
+
+### Custom Signatures
+
+Place a JSON file at `signatures_db` path with the same structure as the built-in database. The Dashboard can push updated signatures to this path automatically.
+
+---
+
 ## Architecture
 
 ```
@@ -276,6 +313,13 @@ plugin/             Plugin manager + runtime plugins
   ssl.go            TLS cert expiry monitor
   docker.go         Container health via docker events + docker ps
   laravel.go        Laravel log tailer (CRITICAL/ERROR patterns)
+
+scanner/            Phase 3 — file scanner & CVE signature database
+  scanner.go        Periodic scan loop, incident emit, Dashboard push
+  webshell.go       Signature matching engine (PHP webshells, backdoors)
+  signatures.go     CVE/webshell signature database (JSON, updatable)
+  integrity.go      SQLite hash database, file change detection
+  regex.go          Compiled regex cache
 
 health/             Calculate agent health score (0-100)
 config/             YAML config load + Save() for agent_id persist

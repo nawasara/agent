@@ -21,6 +21,7 @@ import (
 	"github.com/nawasara/agent/internal/health"
 	"github.com/nawasara/agent/internal/plugin"
 	"github.com/nawasara/agent/internal/reporter"
+	"github.com/nawasara/agent/internal/scanner"
 )
 
 var (
@@ -220,6 +221,17 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		laravelPlugin := plugin.NewLaravelPlugin(cfg.Plugins.Laravel.LogPaths, incidentCh)
 		go laravelPlugin.Run(ctx)
 		log.Printf("[collector] laravel plugin started")
+	}
+
+	// Phase 3 — File Scanner
+	if cfg.Scanner.Enabled {
+		sc, err := scanner.New(cfg, incidentCh)
+		if err != nil {
+			log.Printf("WARN: file scanner init failed: %v — scanner disabled", err)
+		} else {
+			go sc.Run(ctx)
+			log.Printf("[scanner] file scanner started (interval=%s dirs=%v)", cfg.Scanner.ScanInterval, cfg.Scanner.WebDirs)
+		}
 	}
 
 	// Latest metrics for heartbeat

@@ -18,6 +18,7 @@ type Config struct {
 	Reporter     ReporterConfig  `yaml:"reporter"`
 	Executor     ExecutorConfig  `yaml:"executor"`
 	Plugins      PluginsConfig   `yaml:"plugins"`
+	Scanner      ScannerConfig   `yaml:"scanner"`
 
 	filePath string // internal — path used for Save()
 }
@@ -68,11 +69,20 @@ type ExecutorConfig struct {
 }
 
 type PluginsConfig struct {
-	Dir     string       `yaml:"dir"`
-	Enabled []string     `yaml:"enabled"`
-	SSL     SSLConfig    `yaml:"ssl"`
+	Dir     string              `yaml:"dir"`
+	Enabled []string            `yaml:"enabled"`
+	SSL     SSLConfig           `yaml:"ssl"`
 	Laravel LaravelPluginConfig `yaml:"laravel"`
 	Docker  DockerPluginConfig  `yaml:"docker"`
+}
+
+type ScannerConfig struct {
+	Enabled      bool          `yaml:"enabled"`
+	ScanInterval time.Duration `yaml:"scan_interval"`
+	WebDirs      []string      `yaml:"web_dirs"`
+	WatchPaths   []string      `yaml:"watch_paths"`
+	SignaturesDB string        `yaml:"signatures_db"` // path to JSON signature file; empty = built-in defaults
+	HashDB       string        `yaml:"hash_db"`       // path to SQLite hash database
 }
 
 type SSLConfig struct {
@@ -171,6 +181,17 @@ func defaults() *Config {
 			Docker: DockerPluginConfig{
 				CheckInterval: 5 * time.Minute,
 			},
+		},
+		Scanner: ScannerConfig{
+			Enabled:      false,
+			ScanInterval: 6 * time.Hour,
+			WebDirs:      []string{"/var/www", "/home/*/public_html"},
+			WatchPaths: []string{
+				"/var/www/html/.env",
+				"/var/www/html/composer.json",
+				"/etc/nawasara-agent/config.yaml",
+			},
+			HashDB: "/var/lib/nawasara-agent/hashes.db",
 		},
 	}
 }
