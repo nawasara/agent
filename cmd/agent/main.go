@@ -123,6 +123,9 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	switch webServer {
 	case "nginx":
 		c := collector.NewNginxCollector(cfg.Collector.LogPaths.Nginx.Access, eventBus)
+		if cfg.Collector.LogPaths.Nginx.VHosts != "" {
+			c.WithVhostGlob(cfg.Collector.LogPaths.Nginx.VHosts)
+		}
 		startCollector("nginx:"+cfg.Collector.LogPaths.Nginx.Access, c.Start, c.Stop)
 	case "apache":
 		c := collector.NewApacheCollector(cfg.Collector.LogPaths.Apache.Access, eventBus)

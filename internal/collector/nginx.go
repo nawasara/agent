@@ -17,11 +17,13 @@ var nginxPattern = regexp.MustCompile(
 const nginxTimeLayout = "02/Jan/2006:15:04:05 -0700"
 
 type NginxCollector struct {
-	logPath string
-	source  string // "nginx" | "apache"
-	out     chan<- Event
-	tailer  *Tailer
-	lineCh  chan string
+	logPath    string
+	vhostGlob  string // optional glob for vhost logs
+	source     string // "nginx" | "apache"
+	out        chan<- Event
+	tailer     *Tailer
+	globTailer *GlobTailer
+	lineCh     chan string
 }
 
 func NewNginxCollector(logPath string, out chan<- Event) *NginxCollector {
@@ -29,13 +31,26 @@ func NewNginxCollector(logPath string, out chan<- Event) *NginxCollector {
 	return &NginxCollector{logPath: logPath, source: "nginx", out: out, lineCh: lineCh, tailer: NewTailer(logPath, lineCh)}
 }
 
+// WithVhostGlob enables watching additional vhost log files matching the glob pattern.
+func (c *NginxCollector) WithVhostGlob(pattern string) *NginxCollector {
+	c.vhostGlob = pattern
+	return c
+}
+
 func (c *NginxCollector) Start() {
 	c.tailer.Start()
+	if c.vhostGlob != "" {
+		c.globTailer = NewGlobTailer(c.vhostGlob, c.lineCh)
+		c.globTailer.Start()
+	}
 	go c.process()
 }
 
 func (c *NginxCollector) Stop() {
 	c.tailer.Stop()
+	if c.globTailer != nil {
+		c.globTailer.Stop()
+	}
 }
 
 func (c *NginxCollector) process() {

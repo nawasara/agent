@@ -94,16 +94,91 @@ func (e *Engine) matchLog(rule Rule, entry *collector.LogEntry) bool {
 	if c.Method != "" && !strings.EqualFold(c.Method, entry.Method) {
 		return false
 	}
+
+	// Condition matching uses AND between different field groups, OR within each group:
+	//   path group  = PathEquals OR PathContains OR PathRegex  (any one is enough)
+	//   query group = QueryRegex (any one is enough)
+	//   ua group    = UAContains (any one is enough)
+	//   status group = StatusMin/Max range check
+	// When PathContains AND PathRegex are both specified, the path must satisfy
+	// BOTH sub-groups (AND) — used for webshell upload: directory in path + .php extension.
+
+	if !e.matchPathConditions(c, entry) {
+		return false
+	}
+
+	// Extra conditions (query/UA/status): if specified, at least one must match.
+	hasExtra := len(c.QueryRegex) > 0 || len(c.UAContains) > 0 || (c.StatusMin > 0 && c.StatusMax > 0)
+	if hasExtra && !e.matchExtraConditions(c, entry) {
+		return false
+	}
+
+	// Must have matched at least something.
+	hasPath := len(c.PathEquals) > 0 || len(c.PathContains) > 0 || len(c.PathRegex) > 0
+	return hasPath || hasExtra
+}
+
+// matchPathConditions checks path-based conditions.
+// If both PathContains and PathRegex are set, BOTH must match (AND).
+// PathEquals is always OR with the others.
+func (e *Engine) matchPathConditions(c Conditions, entry *collector.LogEntry) bool {
+	if len(c.PathEquals) == 0 && len(c.PathContains) == 0 && len(c.PathRegex) == 0 {
+		return true // no path conditions — pass through
+	}
+
+	// PathEquals: any match → immediately true
 	for _, p := range c.PathEquals {
 		if strings.EqualFold(entry.Path, p) {
 			return true
 		}
 	}
+
+	// PathContains + PathRegex AND logic when both present
+	if len(c.PathContains) > 0 && len(c.PathRegex) > 0 {
+		containsOK := false
+		for _, p := range c.PathContains {
+			if strings.Contains(entry.Path, p) {
+				containsOK = true
+				break
+			}
+		}
+		if !containsOK {
+			return false
+		}
+		for _, pattern := range c.PathRegex {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				continue
+			}
+			if re.MatchString(entry.Path) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Only PathContains
 	for _, p := range c.PathContains {
 		if strings.Contains(entry.Path, p) {
 			return true
 		}
 	}
+
+	// Only PathRegex
+	for _, pattern := range c.PathRegex {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			continue
+		}
+		if re.MatchString(entry.Path) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (e *Engine) matchExtraConditions(c Conditions, entry *collector.LogEntry) bool {
 	for _, pattern := range c.QueryRegex {
 		re, err := regexp.Compile(pattern)
 		if err != nil {

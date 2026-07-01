@@ -57,9 +57,10 @@ type Conditions struct {
 	Source        string   `yaml:"source"` // web_log | ssh_log
 	PerIP         bool     `yaml:"per_ip"`
 	WindowSeconds int      `yaml:"window_seconds"`
-	Method        string   `yaml:"method"`       // POST, GET, etc.
+	Method        string   `yaml:"method"`        // POST, GET, etc.
 	PathEquals    []string `yaml:"path_equals"`
 	PathContains  []string `yaml:"path_contains"`
+	PathRegex     []string `yaml:"path_regex"`    // regex matched against full path
 	QueryRegex    []string `yaml:"query_regex"`
 	UAContains    []string `yaml:"ua_contains"`
 	EventType     string   `yaml:"event_type"` // for SSH: "failed" | "root_accepted"

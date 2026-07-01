@@ -73,6 +73,17 @@ func DefaultRules() []Rule {
 			Conditions: Conditions{Source: "web_log", UAContains: []string{"sqlmap", "nikto", "nmap", "masscan", "zgrab", "nuclei", "dirsearch", "gobuster", "ffuf", "wfuzz"}},
 		},
 		{
+			// POST to an upload directory with a .php extension in the path
+			// — classic webshell drop. PathContains + PathRegex = AND (both must match).
+			ID: "rule_webshell_upload", Name: "PHP Webshell Upload", Category: "webshell_upload",
+			Severity: "critical", Score: 70, Threshold: 70,
+			Conditions: Conditions{
+				Source: "web_log", Method: "POST",
+				PathContains: []string{"/upload/", "/uploads/", "/wp-content/uploads/", "/files/", "/images/", "/media/", "/tmp/"},
+				PathRegex:    []string{`(?i)\.(php[0-9]?|phtml|phar|php-s)(\?|$)`},
+			},
+		},
+		{
 			ID: "rule_brute_force_http", Name: "HTTP Login Brute Force", Category: "brute_force",
 			Severity: "high", Score: 5, Threshold: 50,
 			Conditions: Conditions{Source: "web_log", Method: "POST", PathContains: []string{"/login", "/wp-login.php", "/admin/login", "/auth/login"}, PerIP: true, WindowSeconds: 60},
