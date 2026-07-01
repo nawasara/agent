@@ -43,9 +43,17 @@ if [ -z "$API_KEY" ]; then
 fi
 
 # Download binary
+# Primary: via Dashboard proxy (handles version resolution + redirect to GitHub Releases)
+# Fallback: direct GitHub Releases URL
+GITHUB_REPO="${NAWASARA_GITHUB_REPO:-nawasara/agent}"
 DOWNLOAD_URL="$DASHBOARD_URL/agent/download/$AGENT_VERSION/$OS/$ARCH/nawasara-agent"
-info "Downloading binary from $DOWNLOAD_URL..."
-curl -fsSL "$DOWNLOAD_URL" -o "$BINARY.tmp"
+FALLBACK_URL="https://github.com/$GITHUB_REPO/releases/latest/download/nawasara-agent-$OS-$ARCH"
+
+info "Downloading binary..."
+if ! curl -fsSL --connect-timeout 10 "$DOWNLOAD_URL" -o "$BINARY.tmp" 2>/dev/null; then
+  warn "Dashboard download failed, falling back to GitHub Releases..."
+  curl -fsSL "$FALLBACK_URL" -o "$BINARY.tmp" || error "Download failed from both Dashboard and GitHub."
+fi
 chmod +x "$BINARY.tmp"
 mv "$BINARY.tmp" "$BINARY"
 info "Binary installed: $BINARY"
