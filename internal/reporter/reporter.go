@@ -178,6 +178,50 @@ func incidentToMap(inc analyzer.Incident) map[string]any {
 	}
 }
 
+// Register calls /api/agent/register and returns (agentID, apiKey, error).
+// Used when agent_id is empty in config (first run without install.sh).
+func (r *Reporter) Register(name, hostname, os_, arch, webServer, ipLocal string) (agentID, apiKey string, err error) {
+	payload, _ := json.Marshal(map[string]any{
+		"name":          name,
+		"hostname":      hostname,
+		"os":            os_,
+		"arch":          arch,
+		"agent_version": Version,
+		"web_server":    webServer,
+		"ip_local":      ipLocal,
+	})
+
+	url := r.cfg.DashboardURL + "/api/agent/register"
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("register: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
+		return "", "", fmt.Errorf("register: HTTP %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Success bool   `json:"success"`
+		AgentID string `json:"agent_id"`
+		APIKey  string `json:"api_key"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", "", fmt.Errorf("register: decode response: %w", err)
+	}
+	if !result.Success || result.AgentID == "" {
+		return "", "", fmt.Errorf("register: server returned failure")
+	}
+	return result.AgentID, result.APIKey, nil
+}
+
 var (
 	Version   = "0.1.0"
 	startTime = time.Now()

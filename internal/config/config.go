@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,8 @@ type Config struct {
 	Reporter     ReporterConfig  `yaml:"reporter"`
 	Executor     ExecutorConfig  `yaml:"executor"`
 	Plugins      PluginsConfig   `yaml:"plugins"`
+
+	filePath string // internal — path used for Save()
 }
 
 type CollectorConfig struct {
@@ -78,7 +81,36 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
+	cfg.filePath = path
 	return cfg, nil
+}
+
+// Save writes selected fields (agent_id, api_key) back to the config file.
+// Uses simple line-by-line replacement to preserve comments and formatting.
+func (c *Config) Save() error {
+	if c.filePath == "" {
+		return nil
+	}
+	data, err := os.ReadFile(c.filePath)
+	if err != nil {
+		return err
+	}
+	content := string(data)
+	content = replaceYAMLField(content, "agent_id", c.AgentID)
+	content = replaceYAMLField(content, "api_key", c.APIKey)
+	return os.WriteFile(c.filePath, []byte(content), 0600)
+}
+
+func replaceYAMLField(content, key, value string) string {
+	lines := strings.Split(content, "\n")
+	prefix := key + ":"
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, prefix) {
+			lines[i] = key + ": " + value
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func defaults() *Config {

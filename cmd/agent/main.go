@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"os"
 	"os/signal"
+	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -82,6 +85,39 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// Reporter initialised early so we can call Register if needed
+	rep, err := reporter.New(cfg)
+	if err != nil {
+		return err
+	}
+	defer rep.Close()
+
+	// Auto-register if agent_id is missing (manual install without install.sh)
+	if cfg.AgentID == "" {
+		log.Println("agent_id not set — registering with Dashboard...")
+		hostname, _ := os.Hostname()
+		webServer := cfg.Collector.WebServer
+		if webServer == "auto" {
+			webServer = detectWebServer()
+		}
+		agentID, apiKey, regErr := rep.Register(
+			cfg.AgentName, hostname,
+			detectOS(), runtime.GOARCH,
+			webServer, localIP(),
+		)
+		if regErr != nil {
+			log.Printf("WARN: registration failed: %v — continuing without agent_id (heartbeat/incidents will be rejected)", regErr)
+		} else {
+			cfg.AgentID = agentID
+			cfg.APIKey = apiKey
+			if saveErr := cfg.Save(); saveErr != nil {
+				log.Printf("WARN: could not persist agent_id to config: %v", saveErr)
+			} else {
+				log.Printf("registered as agent_id=%s (saved to config)", agentID)
+			}
+		}
+	}
+
 	// Plugin manager
 	plugins := plugin.NewManager(cfg.Plugins.Dir, cfg.Plugins.Enabled)
 	plugins.Load()
@@ -145,13 +181,6 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 	metricsC := collector.NewMetricsCollector(cfg.Collector.MetricsInterval, eventBus)
 	startCollector("metrics", metricsC.Start, metricsC.Stop)
-
-	// Reporter
-	rep, err := reporter.New(cfg)
-	if err != nil {
-		return err
-	}
-	defer rep.Close()
 
 	go rep.RetryLoop(ctx)
 
@@ -285,4 +314,32 @@ func max(a, b uint64) uint64 {
 		return a
 	}
 	return b
+}
+
+func detectOS() string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return runtime.GOOS
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "PRETTY_NAME=") {
+			return strings.Trim(strings.TrimPrefix(line, "PRETTY_NAME="), `"`)
+		}
+	}
+	return runtime.GOOS
+}
+
+func localIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+			if ipNet.IP.To4() != nil {
+				return ipNet.IP.String()
+			}
+		}
+	}
+	return ""
 }
