@@ -223,6 +223,6 @@ func (r *Reporter) Register(name, hostname, os_, arch, webServer, ipLocal string
 }
 
 var (
-	Version   = "0.1.0"
+	Version   = "0.4.0"
 	startTime = time.Now()
 )

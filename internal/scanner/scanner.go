@@ -3,7 +3,7 @@ package scanner
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -185,7 +185,7 @@ func (s *Scanner) emitFinding(r ScanResult, info os.FileInfo) {
 	log.Printf("[scanner] FINDING %s %s (%s) in %s", r.Severity, r.SigName, r.SignatureID, r.Path)
 
 	inc := analyzer.Incident{
-		ID:       newID(),
+		ID:       deterministicID(r.Path, r.SignatureID),
 		Type:     "file_scan_" + r.Category,
 		Severity: analyzer.Severity(r.Severity),
 		SourceIP: "", // filesystem finding, no source IP
@@ -235,7 +235,7 @@ func (s *Scanner) emitIntegrityChange(change *FileChange) {
 	}
 
 	inc := analyzer.Incident{
-		ID:       newID(),
+		ID:       deterministicID(change.Path, string(change.ChangeType), change.NewHash),
 		Type:     "file_integrity_" + string(change.ChangeType),
 		Severity: severity,
 		SourceIP: "",
@@ -306,10 +306,13 @@ func isCriticalPath(path string) bool {
 	return false
 }
 
-func newID() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return "sc_" + hex.EncodeToString(b)
+// deterministicID derives a stable finding ID from its identity parts so the
+// same file + signature reported across scan cycles reuses the same ID. The
+// Dashboard dedupes by this ID and bumps last_seen_at instead of inserting a
+// duplicate row every cycle.
+func deterministicID(parts ...string) string {
+	h := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return "sc_" + hex.EncodeToString(h[:8])
 }
 
 func min8(n int) int {
