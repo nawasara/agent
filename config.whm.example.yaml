@@ -1,0 +1,95 @@
+# Nawasara Agent — WHM / cPanel server configuration
+# Copy to /etc/nawasara-agent/config.yaml
+#
+# Install flow (agent_id + api_key diisi otomatis):
+#   curl -sSL https://nawasara.ponorogo.go.id/agent/install.sh | bash
+#   lalu GANTI isi /etc/nawasara-agent/config.yaml dengan file ini,
+#   pertahankan baris agent_id: dan api_key: hasil registrasi,
+#   kemudian: systemctl restart nawasara-agent
+
+api_key: ""        # JANGAN dikosongkan manual — ambil dari hasil install.sh
+dashboard_url: https://nawasara.ponorogo.go.id
+agent_name: whm-ponorogo
+agent_id: ""       # diisi otomatis saat registrasi
+
+# ─── Collector ───────────────────────────────────────────────────────────────
+collector:
+  # SENGAJA "nginx", BUKAN "apache"/"auto": cPanel menulis traffic per domain
+  # ke domlogs terpisah, dan hanya mode nginx yang punya dukungan glob vhosts.
+  # Format log Apache = Combined Log Format yang sama, parser 100% kompatibel.
+  web_server: nginx
+
+  ssh_log: auto                     # deteksi otomatis auth.log / secure
+  metrics_interval: 30s
+
+  log_paths:
+    nginx:
+      # Access log utama Apache EA4 (traffic non-vhost / default host)
+      access: /etc/apache2/logs/access_log
+      error:  /etc/apache2/logs/error_log
+      # Per-domain domlogs — file baru (akun baru) otomatis ke-tail tiap 30 detik.
+      # Pola *go.id* mencakup domain.go.id + domain.go.id-ssl_log. File
+      # *-bytes_log ikut ter-match tapi tidak masalah: formatnya bukan
+      # Combined Log sehingga barisnya di-skip parser.
+      # Verifikasi path dulu: ls /usr/local/apache/domlogs/
+      vhosts: /usr/local/apache/domlogs/*go.id*
+
+# ─── Analyzer ────────────────────────────────────────────────────────────────
+analyzer:
+  rules_dir: /etc/nawasara-agent/rules/
+  rules_sync_interval: 6h
+  correlation_window: 5m
+  default_threshold: 20
+
+# ─── Reporter ────────────────────────────────────────────────────────────────
+reporter:
+  push_timeout: 10s
+  retry_interval: 30s
+  buffer_db: /var/lib/nawasara-agent/buffer.db
+  buffer_max_age: 168h
+  buffer_max_size_mb: 100
+  heartbeat_interval: 60s
+
+# ─── Executor — biarkan mati sampai butuh remote action dari dashboard ───────
+executor:
+  enabled: false
+  poll_interval: 30s
+  allowed_actions:
+    - block_ip
+    - unblock_ip
+
+# ─── Plugins ─────────────────────────────────────────────────────────────────
+plugins:
+  dir: /etc/nawasara-agent/plugins/available/
+  enabled:
+    - nginx        # label collector web (lihat catatan web_server di atas)
+    - ssh          # brute force / root login via /var/log/secure
+    - ssl          # monitor kadaluarsa cert domain utama
+
+  ssl:
+    # Isi domain penting yang di-host di WHM ini (cek: whmapi1 listaccts)
+    hosts:
+      - perdagkum.ponorogo.go.id
+    check_interval: 12h
+    warn_days: 30
+    crit_days: 7
+
+  # laravel: TIDAK diaktifkan — WHM ini hosting WordPress, bukan Laravel
+
+# ─── Scanner — INTI untuk kasus judol/webshell di hosting OPD ────────────────
+scanner:
+  enabled: true
+  scan_interval: 6h
+  # Semua docroot akun cPanel + subdomain/addon domain
+  web_dirs:
+    - /home/*/public_html
+    - /home2/*/public_html          # hapus kalau tidak ada /home2
+  # File kritis yang di-watch perubahan hash-nya.
+  # wp-config.php / .env per akun TIDAK perlu didaftarkan — semua file di
+  # web_dirs otomatis masuk baseline integrity saat scan.
+  watch_paths:
+    - /etc/apache2/conf/httpd.conf
+    - /etc/ssh/sshd_config
+    - /etc/nawasara-agent/config.yaml
+  signatures_db: ""                 # built-in signatures
+  hash_db: /var/lib/nawasara-agent/hashes.db
