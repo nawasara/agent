@@ -28,6 +28,7 @@ type Signature struct {
 	Severity    string   `json:"severity"` // critical | high | medium
 	Score       int      `json:"score"`
 	Description string   `json:"description"`
+	Mitre       string   `json:"mitre"` // MITRE ATT&CK technique ID, e.g. "T1505.003"
 	// Patterns are Go regular expressions (any one match → detected).
 	Patterns    []string `json:"patterns"`
 }
@@ -105,7 +106,7 @@ func defaultSignatures() *SignatureDB {
 		UpdatedAt: time.Now(),
 		Webshells: []Signature{
 			{
-				ID: "ws_c99", Name: "C99 Webshell", Category: "webshell", Severity: "critical", Score: 90,
+				ID: "ws_c99", Name: "C99 Webshell", Category: "webshell", Severity: "critical", Score: 90, Mitre: "T1505.003",
 				Description: "Classic c99 PHP webshell — full feature shell used in mass defacements",
 				Patterns: []string{
 					`\$c99_pass\s*=`,
@@ -116,7 +117,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "ws_r57", Name: "r57 Webshell", Category: "webshell", Severity: "critical", Score: 90,
+				ID: "ws_r57", Name: "r57 Webshell", Category: "webshell", Severity: "critical", Score: 90, Mitre: "T1505.003",
 				Description: "r57 PHP webshell — common variant of c99",
 				Patterns: []string{
 					`\$r57_pass\s*=`,
@@ -125,7 +126,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "ws_wso", Name: "WSO Webshell", Category: "webshell", Severity: "critical", Score: 90,
+				ID: "ws_wso", Name: "WSO Webshell", Category: "webshell", Severity: "critical", Score: 90, Mitre: "T1505.003",
 				Description: "Web Shell by OrganicZ (WSO) — widely used for server defacements",
 				Patterns: []string{
 					`WSO\s*\d+\.\d+`,
@@ -136,7 +137,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "ws_b374k", Name: "b374k Webshell", Category: "webshell", Severity: "critical", Score: 90,
+				ID: "ws_b374k", Name: "b374k Webshell", Category: "webshell", Severity: "critical", Score: 90, Mitre: "T1505.003",
 				Description: "b374k PHP webshell — Unicode obfuscated shell",
 				Patterns: []string{
 					`b374k`,
@@ -145,7 +146,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "ws_indoxploit", Name: "IndoXploit Webshell", Category: "webshell", Severity: "critical", Score: 90,
+				ID: "ws_indoxploit", Name: "IndoXploit Webshell", Category: "webshell", Severity: "critical", Score: 90, Mitre: "T1505.003",
 				Description: "IndoXploit shell — popular in Indonesia defacement scene",
 				Patterns: []string{
 					`IndoXploit`,
@@ -154,7 +155,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "ws_priv8", Name: "Priv8 Webshell", Category: "webshell", Severity: "critical", Score: 90,
+				ID: "ws_priv8", Name: "Priv8 Webshell", Category: "webshell", Severity: "critical", Score: 90, Mitre: "T1505.003",
 				Description: "Priv8 shell variant",
 				Patterns: []string{
 					`Priv8\s*Shell`,
@@ -162,7 +163,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "ws_mini_shell", Name: "Mini PHP Shell", Category: "webshell", Severity: "high", Score: 70,
+				ID: "ws_mini_shell", Name: "Mini PHP Shell", Category: "webshell", Severity: "high", Score: 70, Mitre: "T1505.003",
 				Description: "Minimal PHP one-liner shell — often injected into legitimate files",
 				Patterns: []string{
 					`<\?php\s+@?system\s*\(\s*\$_(?:GET|POST|REQUEST|COOKIE)\s*\[`,
@@ -173,7 +174,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "ws_generic_upload", Name: "Generic Upload Shell", Category: "webshell", Severity: "high", Score: 70,
+				ID: "ws_generic_upload", Name: "Generic Upload Shell", Category: "webshell", Severity: "high", Score: 70, Mitre: "T1505.003",
 				Description: "Generic upload-based PHP shell pattern",
 				Patterns: []string{
 					`move_uploaded_file.*\.php`,
@@ -183,7 +184,7 @@ func defaultSignatures() *SignatureDB {
 		},
 		Backdoors: []Signature{
 			{
-				ID: "bd_eval_base64", Name: "Eval+Base64 Backdoor", Category: "backdoor", Severity: "critical", Score: 85,
+				ID: "bd_eval_base64", Name: "Eval+Base64 Backdoor", Category: "backdoor", Severity: "critical", Score: 85, Mitre: "T1505.003",
 				Description: "eval(base64_decode(...)) — most common obfuscation for PHP backdoors",
 				Patterns: []string{
 					`eval\s*\(\s*base64_decode\s*\(`,
@@ -196,7 +197,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "bd_hex_eval", Name: "Hex-encoded Eval Backdoor", Category: "backdoor", Severity: "critical", Score: 85,
+				ID: "bd_hex_eval", Name: "Hex-encoded Eval Backdoor", Category: "backdoor", Severity: "critical", Score: 85, Mitre: "T1027",
 				Description: "eval(hex2bin(...)) obfuscation",
 				Patterns: []string{
 					`eval\s*\(\s*hex2bin\s*\(`,
@@ -205,7 +206,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "bd_create_function", Name: "create_function Backdoor", Category: "backdoor", Severity: "high", Score: 75,
+				ID: "bd_create_function", Name: "create_function Backdoor", Category: "backdoor", Severity: "high", Score: 75, Mitre: "T1059.004",
 				Description: "create_function() used to execute arbitrary PHP — deprecated but still exploited",
 				Patterns: []string{
 					`create_function\s*\(\s*["'].*["']\s*,\s*base64_decode`,
@@ -213,7 +214,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "bd_system_input", Name: "System/Exec from User Input", Category: "backdoor", Severity: "critical", Score: 85,
+				ID: "bd_system_input", Name: "System/Exec from User Input", Category: "backdoor", Severity: "critical", Score: 85, Mitre: "T1059.004",
 				Description: "Direct system/exec call taking user input — RCE backdoor",
 				Patterns: []string{
 					`system\s*\(\s*\$_(?:GET|POST|REQUEST|COOKIE|SERVER)\s*\[`,
@@ -225,7 +226,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "bd_file_write", Name: "Dynamic File Write Backdoor", Category: "backdoor", Severity: "high", Score: 75,
+				ID: "bd_file_write", Name: "Dynamic File Write Backdoor", Category: "backdoor", Severity: "high", Score: 75, Mitre: "T1105",
 				Description: "PHP code writing new PHP files to disk — dropper behaviour",
 				Patterns: []string{
 					`file_put_contents\s*\(.*\$_(?:GET|POST|REQUEST|COOKIE)`,
@@ -234,14 +235,14 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "bd_mail_spam", Name: "PHP Mail Spammer", Category: "backdoor", Severity: "high", Score: 65,
+				ID: "bd_mail_spam", Name: "PHP Mail Spammer", Category: "backdoor", Severity: "high", Score: 65, Mitre: "T1566",
 				Description: "Mass mail sending from user-controlled inputs — compromised account spammer",
 				Patterns: []string{
 					`mail\s*\(\s*\$_(?:GET|POST|REQUEST)\s*\[.*\$_(?:GET|POST|REQUEST)`,
 				},
 			},
 			{
-				ID: "bd_obfuscated_long", Name: "Long Obfuscated String", Category: "backdoor", Severity: "medium", Score: 50,
+				ID: "bd_obfuscated_long", Name: "Long Obfuscated String", Category: "backdoor", Severity: "medium", Score: 50, Mitre: "T1027",
 				Description: "Suspiciously long base64 or hex string inline in PHP — common in auto-injected backdoors",
 				Patterns: []string{
 					// 200+ consecutive base64 chars inside a PHP string literal
@@ -251,7 +252,7 @@ func defaultSignatures() *SignatureDB {
 		},
 		Exploits: []Signature{
 			{
-				ID: "exp_wp_file_manager", Name: "WP File Manager Exploit Artifact", Category: "exploit", Severity: "critical", Score: 90,
+				ID: "exp_wp_file_manager", Name: "WP File Manager Exploit Artifact", Category: "exploit", Severity: "critical", Score: 90, Mitre: "T1190",
 				Description: "Files dropped by WP File Manager CVE-2020-25213 exploitation",
 				Patterns: []string{
 					`wp-content/plugins/wp-file-manager/lib/files/`,
@@ -260,7 +261,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "exp_phpmyadmin_lfi", Name: "phpMyAdmin LFI Payload", Category: "exploit", Severity: "critical", Score: 85,
+				ID: "exp_phpmyadmin_lfi", Name: "phpMyAdmin LFI Payload", Category: "exploit", Severity: "critical", Score: 85, Mitre: "T1190",
 				Description: "Local file inclusion payload artifacts from phpMyAdmin exploitation",
 				Patterns: []string{
 					`pmasa-2016`,
@@ -268,7 +269,7 @@ func defaultSignatures() *SignatureDB {
 				},
 			},
 			{
-				ID: "exp_log4shell_jndi", Name: "Log4Shell JNDI Payload in Files", Category: "exploit", Severity: "critical", Score: 90,
+				ID: "exp_log4shell_jndi", Name: "Log4Shell JNDI Payload in Files", Category: "exploit", Severity: "critical", Score: 90, Mitre: "T1190",
 				Description: "JNDI lookup string stored in a file — possible persistence or staging artifact",
 				Patterns: []string{
 					`\$\{jndi:(ldap|ldaps|rmi|dns)://`,

@@ -206,18 +206,19 @@ func (s *Scanner) emitFinding(r ScanResult, info os.FileInfo) {
 
 	// Also push structured finding to dedicated endpoint
 	payload := map[string]any{
-		"finding_id":   inc.ID,
-		"path":         r.Path,
-		"signature_id": r.SignatureID,
-		"sig_name":     r.SigName,
-		"category":     r.Category,
-		"severity":     r.Severity,
-		"score":        r.Score,
-		"description":  r.Description,
-		"matched_line": r.MatchedLine,
-		"file_size":    info.Size(),
-		"file_mtime":   info.ModTime().Unix(),
-		"detected_at":  time.Now().Unix(),
+		"finding_id":      inc.ID,
+		"path":            r.Path,
+		"signature_id":    r.SignatureID,
+		"sig_name":        r.SigName,
+		"category":        r.Category,
+		"severity":        r.Severity,
+		"score":           r.Score,
+		"description":     r.Description,
+		"mitre_technique": r.Mitre,
+		"matched_line":    r.MatchedLine,
+		"file_size":       info.Size(),
+		"file_mtime":      info.ModTime().Unix(),
+		"detected_at":     time.Now().Unix(),
 	}
 	s.pushFinding(payload)
 }
@@ -255,17 +256,18 @@ func (s *Scanner) emitIntegrityChange(change *FileChange) {
 	}
 
 	payload := map[string]any{
-		"finding_id":   inc.ID,
-		"path":         change.Path,
-		"signature_id": "file_integrity",
-		"sig_name":     "File Integrity Change",
-		"category":     "integrity",
-		"severity":     string(severity),
-		"score":        score,
-		"description":  fmt.Sprintf("File %s: %s", change.ChangeType, change.Path),
-		"matched_line": fmt.Sprintf("old=%s new=%s", change.OldHash, change.NewHash),
-		"file_size":    change.NewSize,
-		"detected_at":  change.DetectedAt.Unix(),
+		"finding_id":      inc.ID,
+		"path":            change.Path,
+		"signature_id":    "file_integrity",
+		"sig_name":        "File Integrity Change",
+		"category":        "integrity",
+		"severity":        string(severity),
+		"score":           score,
+		"description":     fmt.Sprintf("File %s: %s", change.ChangeType, change.Path),
+		"mitre_technique": "T1565.001",
+		"matched_line":    fmt.Sprintf("old=%s new=%s", change.OldHash, change.NewHash),
+		"file_size":       change.NewSize,
+		"detected_at":     change.DetectedAt.Unix(),
 	}
 	s.pushFinding(payload)
 }

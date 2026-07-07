@@ -32,6 +32,7 @@ type Incident struct {
 	Score             int
 	Correlated        bool
 	CorrelatedGroupID string
+	Mitre             string // MITRE ATT&CK technique ID
 	Evidence          []Evidence
 	DetectedAt        time.Time
 }
@@ -50,6 +51,7 @@ type Rule struct {
 	Severity    string      `yaml:"severity"`
 	Score       int         `yaml:"score"`
 	Threshold   int         `yaml:"threshold"`
+	Mitre       string      `yaml:"mitre"` // MITRE ATT&CK technique ID, e.g. "T1110" or "T1505.003"
 	Conditions  Conditions  `yaml:"conditions"`
 }
 

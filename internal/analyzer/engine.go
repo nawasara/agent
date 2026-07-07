@@ -74,6 +74,7 @@ func (e *Engine) emit(ip string, rule Rule, evidence []Evidence, types []string)
 		Severity:   ScoreToSeverity(rule.Score * len(evidence)),
 		SourceIP:   ip,
 		Score:      rule.Score * len(evidence),
+		Mitre:      rule.Mitre,
 		Evidence:   evidence,
 		DetectedAt: time.Now(),
 	}
@@ -82,6 +83,7 @@ func (e *Engine) emit(ip string, rule Rule, evidence []Evidence, types []string)
 		inc.Correlated = true
 		inc.Type = "exploit_chain"
 		inc.Severity = SeverityCritical
+		inc.Mitre = "" // exploit chain spans multiple techniques — no single ID
 	}
 	select {
 	case e.incidentC <- inc:

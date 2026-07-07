@@ -173,6 +173,7 @@ func incidentToMap(inc analyzer.Incident) map[string]any {
 		"score":               inc.Score,
 		"correlated":          inc.Correlated,
 		"correlated_group_id": inc.CorrelatedGroupID,
+		"mitre_technique":     inc.Mitre,
 		"evidence":            evidence,
 		"detected_at":         inc.DetectedAt.Format(time.RFC3339),
 	}
@@ -223,6 +224,6 @@ func (r *Reporter) Register(name, hostname, os_, arch, webServer, ipLocal string
 }
 
 var (
-	Version   = "0.4.0"
+	Version   = "0.5.0"
 	startTime = time.Now()
 )

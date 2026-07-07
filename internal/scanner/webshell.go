@@ -15,6 +15,7 @@ type ScanResult struct {
 	Severity    string // critical | high | medium
 	Score       int
 	Description string
+	Mitre       string // MITRE ATT&CK technique ID
 	MatchedLine string // first matching snippet (truncated to 120 chars)
 }
 
@@ -82,6 +83,7 @@ func (s *WebshellScanner) ScanFile(path string) ([]ScanResult, error) {
 					Severity:    cs.sig.Severity,
 					Score:       cs.sig.Score,
 					Description: cs.sig.Description,
+					Mitre:       cs.sig.Mitre,
 					MatchedLine: snippet,
 				})
 				break // one match per signature is enough
