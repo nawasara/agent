@@ -1,0 +1,58 @@
+# Nawasara Agent — sidecar pattern (one agent per app)
+#
+# Each application container gets its OWN agent sidecar that watches only that
+# app's logs and web files. Use this when your stack is already dockerized and
+# you want per-app isolation instead of one host-wide agent.
+#
+# The app and its agent share two named volumes:
+#   <app>-logs  — app writes access/error logs here; agent tails them (:ro)
+#   <app>-web   — app's document root; agent scans it for malware/spam (:ro)
+#
+# Replicate the `*-agent` block for every app you want monitored, giving each a
+# unique NAWASARA_AGENT_NAME.
+
+services:
+  # ─── Example application (replace with your real service) ──────────────────
+  myapp:
+    image: myapp:latest
+    container_name: myapp
+    restart: unless-stopped
+    volumes:
+      - myapp-logs:/var/log/nginx      # app writes its logs here
+      - myapp-web:/var/www/html        # app's document root
+
+  # ─── Its dedicated agent sidecar ───────────────────────────────────────────
+  myapp-agent:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: nawasara-agent:local
+    container_name: myapp-agent
+    restart: unless-stopped
+    depends_on:
+      - myapp
+    environment:
+      NAWASARA_URL: https://nawasara.ponorogo.go.id
+      NAWASARA_AGENT_NAME: myapp            # unique per app — shows in Dashboard
+      NAWASARA_WEB_SERVER: nginx
+      NAWASARA_SCANNER_ENABLED: "true"
+      TZ: Asia/Jakarta
+    volumes:
+      - myapp-agent-config:/etc/nawasara-agent   # persists this agent's identity
+      - myapp-agent-data:/var/lib/nawasara-agent
+      - myapp-logs:/var/log/nginx:ro             # SAME volume as app, read-only
+      - myapp-web:/var/www/html:ro               # scan the app's files
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    command: ["run", "--config", "/etc/nawasara-agent/config.yaml"]
+
+volumes:
+  myapp-logs:
+  myapp-web:
+  myapp-agent-config:
+  myapp-agent-data:

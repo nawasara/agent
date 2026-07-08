@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -101,16 +102,48 @@ type DockerPluginConfig struct {
 }
 
 func Load(path string) (*Config, error) {
+	cfg := defaults()
+
+	// The config file is optional in container/env-only deployments. When it's
+	// missing we start from defaults and rely on env vars (Docker compose sets
+	// NAWASARA_* and the agent self-registers, persisting creds back to `path`).
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+	} else if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
-	cfg := defaults()
-	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, err
-	}
+
 	cfg.filePath = path
+	cfg.applyEnv()
 	return cfg, nil
+}
+
+// applyEnv overlays a small set of environment variables on top of the config.
+// Only identity/connection fields are exposed — everything else stays in YAML.
+// This lets `docker compose` configure an agent with just env vars.
+func (c *Config) applyEnv() {
+	if v := os.Getenv("NAWASARA_URL"); v != "" {
+		c.DashboardURL = v
+	}
+	if v := os.Getenv("NAWASARA_AGENT_NAME"); v != "" {
+		c.AgentName = v
+	}
+	if v := os.Getenv("NAWASARA_AGENT_ID"); v != "" {
+		c.AgentID = v
+	}
+	if v := os.Getenv("NAWASARA_API_KEY"); v != "" {
+		c.APIKey = v
+	}
+	if v := os.Getenv("NAWASARA_WEB_SERVER"); v != "" {
+		c.Collector.WebServer = v
+	}
+	// NAWASARA_SCANNER_ENABLED=true turns on the file scanner without a YAML edit.
+	if v := os.Getenv("NAWASARA_SCANNER_ENABLED"); v != "" {
+		c.Scanner.Enabled = v == "1" || v == "true" || v == "yes"
+	}
 }
 
 // Save writes selected fields (agent_id, api_key) back to the config file.
@@ -119,10 +152,21 @@ func (c *Config) Save() error {
 	if c.filePath == "" {
 		return nil
 	}
+
 	data, err := os.ReadFile(c.filePath)
 	if err != nil {
-		return err
+		if !os.IsNotExist(err) {
+			return err
+		}
+		// Env-only deployment (no config file yet): write a minimal one so the
+		// registered agent_id + api_key persist across container restarts.
+		content := fmt.Sprintf(
+			"# Nawasara Agent — auto-written on first registration\ndashboard_url: %s\nagent_name: %s\nagent_id: %s\napi_key: %s\n",
+			c.DashboardURL, c.AgentName, c.AgentID, c.APIKey,
+		)
+		return os.WriteFile(c.filePath, []byte(content), 0600)
 	}
+
 	content := string(data)
 	content = replaceYAMLField(content, "agent_id", c.AgentID)
 	content = replaceYAMLField(content, "api_key", c.APIKey)

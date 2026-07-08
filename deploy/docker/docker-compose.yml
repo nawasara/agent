@@ -1,0 +1,65 @@
+# Nawasara Agent — standalone Docker deployment
+#
+# Runs one agent in its own container. It self-registers with the Dashboard on
+# first start (using the NAWASARA_* env vars below) and persists its agent_id +
+# api_key to the `agent-config` volume so restarts reuse the same identity.
+#
+# Quick start:
+#   1. Edit NAWASARA_AGENT_NAME below (how this host shows in the Dashboard).
+#   2. docker compose up -d --build
+#   3. docker compose logs -f     # look for "registered as agent_id=..."
+#
+# What it monitors depends on the volumes you mount (see comments inline).
+
+services:
+  nawasara-agent:
+    build:
+      # Build context is the repo root (two levels up from this file).
+      context: ../..
+      dockerfile: Dockerfile
+    # Or pin a released binary instead of building — see README for the
+    # image-based variant.
+    image: nawasara-agent:local
+    container_name: nawasara-agent
+    restart: unless-stopped
+
+    environment:
+      # Dashboard base URL (no trailing slash).
+      NAWASARA_URL: https://nawasara.ponorogo.go.id
+      # How this agent appears in the Dashboard agents list. MAKE THIS UNIQUE.
+      NAWASARA_AGENT_NAME: docker-host-01
+      # auto | nginx | apache — auto-detect works for most hosts.
+      NAWASARA_WEB_SERVER: auto
+      # Turn the Phase-3 file scanner on (webshell/backdoor/SEO-spam).
+      NAWASARA_SCANNER_ENABLED: "true"
+      TZ: Asia/Jakarta
+
+    volumes:
+      # --- Identity (REQUIRED) — persists agent_id + api_key across restarts ---
+      - agent-config:/etc/nawasara-agent
+      - agent-data:/var/lib/nawasara-agent
+
+      # --- What to monitor (mount what this host has; all read-only) ----------
+      # Host logs — SSH auth + web access logs:
+      - /var/log:/var/log:ro
+      # Web roots to scan for malicious/spam files (adjust to your layout):
+      - /var/www:/var/www:ro
+      # - /home:/home:ro          # cPanel/WHM-style per-user public_html
+
+    # The agent is a lightweight monitor — keep it modest and unprivileged.
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+    # Runs `nawasara-agent run` (Dockerfile ENTRYPOINT/CMD). --config points at
+    # the persisted identity file; it's written on first registration.
+    command: ["run", "--config", "/etc/nawasara-agent/config.yaml"]
+
+volumes:
+  agent-config:
+  agent-data:

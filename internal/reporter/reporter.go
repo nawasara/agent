@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -24,6 +26,14 @@ type Reporter struct {
 }
 
 func New(cfg *config.Config) (*Reporter, error) {
+	// Ensure the buffer DB's parent dir exists — on a fresh container there's no
+	// install.sh to have created /var/lib/nawasara-agent.
+	if dir := filepath.Dir(cfg.Reporter.BufferDB); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("create buffer dir: %w", err)
+		}
+	}
+
 	db, err := sql.Open("sqlite", cfg.Reporter.BufferDB)
 	if err != nil {
 		return nil, fmt.Errorf("open buffer db: %w", err)

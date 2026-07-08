@@ -80,8 +80,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if cfg.APIKey == "" {
-		log.Fatal("api_key not set in config — edit /etc/nawasara-agent/config.yaml")
+	// An empty api_key is only fatal when we also have an agent_id (i.e. a
+	// provisioned agent whose key went missing). With both empty we self-register
+	// below and obtain the key — the normal path for a fresh Docker/env deploy.
+	if cfg.APIKey == "" && cfg.AgentID != "" {
+		log.Fatal("api_key not set but agent_id is — restore the api_key in the config")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -18,9 +18,15 @@ FROM alpine:3.20
 
 RUN apk --no-cache add ca-certificates tzdata && \
     addgroup -S nawasara && \
-    adduser -S -G nawasara nawasara
+    adduser -S -G nawasara nawasara && \
+    mkdir -p /etc/nawasara-agent /var/lib/nawasara-agent && \
+    chown -R nawasara:nawasara /etc/nawasara-agent /var/lib/nawasara-agent
 
 COPY --from=builder /out/nawasara-agent /usr/local/bin/nawasara-agent
+
+# Persisted identity + buffer DB live here — declare as volumes so compose can
+# mount named volumes over them without losing ownership.
+VOLUME ["/etc/nawasara-agent", "/var/lib/nawasara-agent"]
 
 ENTRYPOINT ["/usr/local/bin/nawasara-agent"]
 CMD ["run"]
