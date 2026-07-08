@@ -15,6 +15,7 @@ type SignatureDB struct {
 	Webshells  []Signature `json:"webshells"`
 	Backdoors  []Signature `json:"backdoors"`
 	Exploits   []Signature `json:"exploits"`
+	SeoSpam    []Signature `json:"seo_spam"`
 
 	// compiled regex cache keyed by signature ID — populated on Load
 	compiled map[string]*compiledSig
@@ -76,10 +77,11 @@ func SaveSignatureDB(path string, db *SignatureDB) error {
 
 // AllSignatures returns a flat slice of all signatures in the database.
 func (db *SignatureDB) AllSignatures() []Signature {
-	out := make([]Signature, 0, len(db.Webshells)+len(db.Backdoors)+len(db.Exploits))
+	out := make([]Signature, 0, len(db.Webshells)+len(db.Backdoors)+len(db.Exploits)+len(db.SeoSpam))
 	out = append(out, db.Webshells...)
 	out = append(out, db.Backdoors...)
 	out = append(out, db.Exploits...)
+	out = append(out, db.SeoSpam...)
 	return out
 }
 
@@ -275,6 +277,40 @@ func defaultSignatures() *SignatureDB {
 					`\$\{jndi:(ldap|ldaps|rmi|dns)://`,
 					`\$\{j\$\{::-n\}di:`,
 					`\$\{\$\{::-j\}ndi:`,
+				},
+			},
+		},
+		SeoSpam: []Signature{
+			// SEO-spam content dropped as .html/.php files (or injected into
+			// legit pages) selling illegal abortion drugs or gambling. Detected
+			// by strong phrases that never appear in genuine government content.
+			// Deliberately NOT matching bare clinical words (misoprostol/aborsi)
+			// so real puskesmas health articles aren't flagged — same two-tier
+			// philosophy as the dashboard's judol/pharma detectors.
+			{
+				ID: "spam_pharma_abortion", Name: "Illegal Abortion-Drug SEO Spam", Category: "seo_spam", Severity: "high", Score: 75, Mitre: "T1584.006",
+				Description: "Page selling illegal abortion pills (Cytotec/misoprostol) — SEO spam injected into a compromised gov site",
+				Patterns: []string{
+					`(?i)penggugur\s+kandungan`,
+					`(?i)obat\s+aborsi`,
+					`(?i)jual\s+(obat\s+)?cytotec`,
+					`(?i)cytotec\s+(400|200)\s*(mcg|mg)?`,
+					`(?i)menggugurkan\s+kandungan`,
+					`(?i)obat\s+penggugur`,
+					`(?i)apotek\s+cytotec`,
+				},
+			},
+			{
+				ID: "spam_gambling", Name: "Online Gambling SEO Spam", Category: "seo_spam", Severity: "high", Score: 70, Mitre: "T1584.006",
+				Description: "Page promoting online gambling (judol) — SEO spam injected into a compromised gov site",
+				Patterns: []string{
+					`(?i)slot\s+gacor`,
+					`(?i)situs\s+(slot\s+)?gacor`,
+					`(?i)rtp\s+slot`,
+					`(?i)(gates\s+of\s+olympus|starlight\s+princess|sweet\s+bonanza)`,
+					`(?i)maxwin`,
+					`(?i)bonus\s+new\s+member`,
+					`(?i)(sbobet|pragmatic\s+play|pgsoft|pg\s+soft)`,
 				},
 			},
 		},

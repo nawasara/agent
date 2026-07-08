@@ -25,6 +25,8 @@ type ScanResult struct {
 const maxScanBytes = 512 * 1024
 
 // allowedExtensions lists PHP-family file extensions we scan for malicious code.
+// .html/.htm are included because SEO-spam pages (pharma/gambling) are often
+// dropped as static HTML files outside WordPress, not as PHP or DB posts.
 var allowedExtensions = map[string]bool{
 	".php":    true,
 	".php3":   true,
@@ -35,6 +37,8 @@ var allowedExtensions = map[string]bool{
 	".phar":   true,
 	".php-s":  true,
 	".shtml":  true,
+	".html":   true,
+	".htm":    true,
 	".js": true, // sometimes used for server-side injected loaders
 }
 

@@ -40,8 +40,8 @@ func New(cfg *config.Config, incidentC chan<- analyzer.Incident) (*Scanner, erro
 	if err != nil {
 		return nil, fmt.Errorf("load signature db: %w", err)
 	}
-	log.Printf("[scanner] loaded signature db version=%s webshells=%d backdoors=%d exploits=%d",
-		sigDB.Version, len(sigDB.Webshells), len(sigDB.Backdoors), len(sigDB.Exploits))
+	log.Printf("[scanner] loaded signature db version=%s webshells=%d backdoors=%d exploits=%d seo_spam=%d",
+		sigDB.Version, len(sigDB.Webshells), len(sigDB.Backdoors), len(sigDB.Exploits), len(sigDB.SeoSpam))
 
 	hashDB, err := OpenHashDB(cfg.Scanner.HashDB)
 	if err != nil {
