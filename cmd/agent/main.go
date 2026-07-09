@@ -171,6 +171,12 @@ func runAgent(cmd *cobra.Command, args []string) error {
 	case "apache":
 		c := collector.NewApacheCollector(cfg.Collector.LogPaths.Apache.Access, eventBus)
 		startCollector("apache:"+cfg.Collector.LogPaths.Apache.Access, c.Start, c.Stop)
+	case "caddy", "frankenphp":
+		c := collector.NewCaddyCollector(cfg.Collector.LogPaths.Caddy.Access, eventBus)
+		if cfg.Collector.LogPaths.Caddy.VHosts != "" {
+			c.WithVhostGlob(cfg.Collector.LogPaths.Caddy.VHosts)
+		}
+		startCollector("caddy:"+cfg.Collector.LogPaths.Caddy.Access, c.Start, c.Stop)
 	}
 
 	if plugins.IsEnabled("ssh") {
@@ -337,6 +343,8 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 func detectWebServer() string {
 	switch {
+	case fileExists("/var/log/caddy/access.log") || fileExists("/etc/caddy/Caddyfile") || fileExists("/etc/frankenphp/Caddyfile"):
+		return "caddy"
 	case fileExists("/var/log/nginx/access.log") || fileExists("/etc/nginx/nginx.conf"):
 		return "nginx"
 	case fileExists("/var/log/apache2/access.log") || fileExists("/etc/apache2/apache2.conf"):

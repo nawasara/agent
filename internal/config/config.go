@@ -34,6 +34,12 @@ type CollectorConfig struct {
 type LogPathsConfig struct {
 	Nginx  NginxLogPaths  `yaml:"nginx"`
 	Apache ApacheLogPaths `yaml:"apache"`
+	Caddy  CaddyLogPaths  `yaml:"caddy"`
+}
+
+type CaddyLogPaths struct {
+	Access string `yaml:"access"` // Caddy/FrankenPHP JSON access log
+	VHosts string `yaml:"vhosts"` // optional glob for per-site access logs
 }
 
 type NginxLogPaths struct {
@@ -193,6 +199,7 @@ func defaults() *Config {
 			LogPaths: LogPathsConfig{
 				Nginx:  NginxLogPaths{Access: "/var/log/nginx/access.log", Error: "/var/log/nginx/error.log", VHosts: "/var/log/nginx/*_access.log"},
 				Apache: ApacheLogPaths{Access: "/var/log/apache2/access.log", Error: "/var/log/apache2/error.log"},
+				Caddy:  CaddyLogPaths{Access: "/var/log/caddy/access.log", VHosts: "/var/log/caddy/*.log"},
 			},
 			MetricsInterval: 30 * time.Second,
 		},

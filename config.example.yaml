@@ -22,8 +22,8 @@ agent_id: ""
 
 collector:
   # Web server to collect access logs from.
-  # "auto" detects nginx/apache by checking known log/config paths.
-  # Options: auto | nginx | apache
+  # "auto" detects caddy/nginx/apache by checking known log/config paths.
+  # Options: auto | nginx | apache | caddy (also handles FrankenPHP)
   web_server: auto
 
   # SSH auth log path.
@@ -46,6 +46,14 @@ collector:
     apache:
       access: /var/log/apache2/access.log
       error:  /var/log/apache2/error.log
+
+    # Caddy / FrankenPHP — JSON access log (not Combined Log Format).
+    # Real client IP is taken from X-Forwarded-For (Traefik/proxy in front),
+    # falling back to remote_ip. Configure Caddy to write JSON to a file:
+    #   log { output file /var/log/caddy/access.log; format json }
+    caddy:
+      access: /var/log/caddy/access.log
+      vhosts: /var/log/caddy/*.log
 
 # ─── Analyzer ────────────────────────────────────────────────────────────────
 
