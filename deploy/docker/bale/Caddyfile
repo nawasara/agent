@@ -1,0 +1,28 @@
+# Example Caddyfile / FrankenPHP config for the Bale stack.
+#
+# The one thing the agent needs: an access log written to a FILE in JSON, on the
+# `caddy-logs` volume shared with the agent sidecar. The `log` block below does
+# exactly that. Merge it into your real Caddyfile.
+
+{
+	# Trust Traefik so Caddy keeps the real client IP in X-Forwarded-For.
+	# Replace with your Traefik/Docker network CIDR.
+	servers {
+		trusted_proxies static 172.16.0.0/12 10.0.0.0/8
+	}
+}
+
+bale.ponorogo.go.id {
+	# --- Access log the Nawasara agent tails ---
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+		format json          # agent parses Caddy JSON; do not change to console
+	}
+
+	# FrankenPHP / your app config
+	root * /app/public
+	php_server
+}

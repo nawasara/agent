@@ -23,10 +23,7 @@ services:
 
   # ─── Its dedicated agent sidecar ───────────────────────────────────────────
   myapp-agent:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-    image: nawasara-agent:local
+    image: ghcr.io/nawasara/agent:latest
     container_name: myapp-agent
     restart: unless-stopped
     depends_on:

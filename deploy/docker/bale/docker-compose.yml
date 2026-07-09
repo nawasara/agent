@@ -1,0 +1,62 @@
+# Nawasara Agent — Bale Production Stack (Traefik → Caddy → FrankenPHP)
+#
+# Drop-in example. The `app` service is a placeholder for your existing
+# FrankenPHP/Caddy container — keep YOUR service, just add the two volume mounts
+# marked "AGENT:" to it, then paste the `nawasara-agent` service + the `volumes`
+# block below.
+#
+# See README.bale.md for the full step-by-step (Caddyfile log config, verify).
+
+services:
+  # ─── Your app (FrankenPHP + embedded Caddy) — EXAMPLE, replace with real one ──
+  app:
+    image: dunglas/frankenphp   # <-- your real image
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/frankenphp/Caddyfile:ro
+      - app-web:/app/public                 # AGENT: docroot the scanner reads
+      - caddy-logs:/var/log/caddy           # AGENT: Caddy writes access.log here
+    labels:
+      # your existing Traefik labels stay as-is, e.g.:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bale.rule=Host(`bale.ponorogo.go.id`)"
+      - "traefik.http.services.bale.loadbalancer.server.port=80"
+    networks:
+      - web        # same network as Traefik
+
+  # ─── Nawasara Agent sidecar ───────────────────────────────────────────────
+  nawasara-agent:
+    image: ghcr.io/nawasara/agent:latest
+    container_name: bale-nawasara-agent
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      NAWASARA_URL: https://nawasara.ponorogo.go.id
+      NAWASARA_AGENT_NAME: bale-production   # UNIQUE name shown in the Dashboard
+      NAWASARA_WEB_SERVER: caddy             # parse Caddy JSON + X-Forwarded-For
+      NAWASARA_SCANNER_ENABLED: "true"       # scan web files for webshell/spam
+      TZ: Asia/Jakarta
+    volumes:
+      - agent-config:/etc/nawasara-agent     # persists agent_id + api_key
+      - agent-data:/var/lib/nawasara-agent
+      - caddy-logs:/var/log/caddy:ro         # SAME volume as app, read-only
+      - app-web:/app/public:ro               # scan the app's document root
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    command: ["run", "--config", "/etc/nawasara-agent/config.yaml"]
+
+volumes:
+  caddy-logs:
+  app-web:
+  agent-config:
+  agent-data:
+
+networks:
+  web:
+    external: true    # the network Traefik already uses

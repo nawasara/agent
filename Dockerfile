@@ -7,9 +7,13 @@ COPY . .
 
 RUN go mod tidy
 
-RUN CGO_ENABLED=0 GOOS=linux go build \
+# VERSION is stamped into the binary so `nawasara-agent version` and heartbeats
+# report the release tag. TARGETARCH is set by buildx for multi-arch builds.
+ARG VERSION=dev
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
     -trimpath \
-    -ldflags="-s -w" \
+    -ldflags="-s -w -X github.com/nawasara/agent/internal/reporter.Version=${VERSION}" \
     -o /out/nawasara-agent \
     ./cmd/agent
 

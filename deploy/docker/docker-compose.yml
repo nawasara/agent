@@ -13,13 +13,10 @@
 
 services:
   nawasara-agent:
-    build:
-      # Build context is the repo root (two levels up from this file).
-      context: ../..
-      dockerfile: Dockerfile
-    # Or pin a released binary instead of building — see README for the
-    # image-based variant.
-    image: nawasara-agent:local
+    # Pull the published multi-arch image. Pin a version (e.g. :0.8.1) in
+    # production instead of :latest. To build from source instead, replace
+    # `image:` with `build: { context: ../.., dockerfile: Dockerfile }`.
+    image: ghcr.io/nawasara/agent:latest
     container_name: nawasara-agent
     restart: unless-stopped
 

@@ -33,11 +33,12 @@ Everything else (scan interval, plugins, rules) still comes from
 ```bash
 cd deploy/docker
 # edit NAWASARA_AGENT_NAME in docker-compose.yml
-docker compose up -d --build
+docker compose up -d
 docker compose logs -f          # look for: registered as agent_id=...
 ```
 
-The agent appears in the Dashboard → Agents within ~30s.
+The agent appears in the Dashboard → Agents within ~30s. The compose files pull
+`ghcr.io/nawasara/agent:latest` — pin a version (`:0.8.1`) in production.
 
 ## Sidecar (per app)
 
@@ -45,23 +46,19 @@ Copy the `myapp` + `myapp-agent` block in `docker-compose.sidecar.yml` for each
 app, giving each a unique `NAWASARA_AGENT_NAME`. The app and its agent share
 `*-logs` and `*-web` volumes; the agent mounts them read-only.
 
-## Using a released binary instead of building
+## Image, or build from source
 
-The compose files build from source (`context: ../..`). To skip building and use
-a published release binary, replace the `build:` block with an image that bakes
-in the downloaded binary, or mount it:
+The compose files pull the published multi-arch image
+`ghcr.io/nawasara/agent:latest` (tags: `:latest`, `:0.8`, `:0.8.1`). To build
+from source instead — a fork, or an unreleased change — swap `image:` for:
 
 ```yaml
-services:
-  nawasara-agent:
-    image: alpine:3.20
-    # download the binary into a volume once, then run it
-    entrypoint: ["/usr/local/bin/nawasara-agent", "run", "--config", "/etc/nawasara-agent/config.yaml"]
-    volumes:
-      - ./nawasara-agent:/usr/local/bin/nawasara-agent:ro   # from GitHub Releases
+    build:
+      context: ../..
+      dockerfile: Dockerfile
 ```
 
-(Once the agent image is published to a registry, point `image:` at it directly.)
+and run `docker compose up -d --build`.
 
 ## What to mount
 
