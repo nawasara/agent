@@ -32,11 +32,11 @@ type TraefikCollector struct {
 	out        chan<- Event
 	tailer     *Tailer
 	globTailer *GlobTailer
-	lineCh     chan string
+	lineCh     chan Line
 }
 
 func NewTraefikCollector(logPath string, out chan<- Event) *TraefikCollector {
-	lineCh := make(chan string, 1000)
+	lineCh := make(chan Line, 1000)
 	return &TraefikCollector{logPath: logPath, out: out, lineCh: lineCh, tailer: NewTailer(logPath, lineCh)}
 }
 
@@ -65,7 +65,7 @@ func (c *TraefikCollector) Stop() {
 
 func (c *TraefikCollector) process() {
 	for line := range c.lineCh {
-		entry := c.parse(strings.TrimSpace(line))
+		entry := c.parse(strings.TrimSpace(line.Text))
 		if entry == nil {
 			continue
 		}
@@ -126,6 +126,7 @@ func (c *TraefikCollector) parse(line string) *LogEntry {
 	return &LogEntry{
 		Timestamp:  ts,
 		SourceIP:   ip,
+		Host:       log.RequestHost,
 		Method:     log.RequestMethod,
 		Path:       path,
 		Query:      query,

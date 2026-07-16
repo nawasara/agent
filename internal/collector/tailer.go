@@ -13,11 +13,11 @@ import (
 // Handles log rotation: when the file is renamed/truncated, reopens it.
 type Tailer struct {
 	Path   string
-	Out    chan<- string
+	Out    chan<- Line
 	stopCh chan struct{}
 }
 
-func NewTailer(path string, out chan<- string) *Tailer {
+func NewTailer(path string, out chan<- Line) *Tailer {
 	return &Tailer{Path: path, Out: out, stopCh: make(chan struct{})}
 }
 
@@ -80,7 +80,7 @@ func (t *Tailer) readLoop(f *os.File) {
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
 			select {
-			case t.Out <- line:
+			case t.Out <- Line{Text: line, Source: t.Path}:
 			case <-t.stopCh:
 				return
 			default:

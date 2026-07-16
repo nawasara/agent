@@ -15,12 +15,12 @@ var (
 type SSHCollector struct {
 	logPath string
 	out     chan<- Event
-	lineCh  chan string
+	lineCh  chan Line
 	tailer  *Tailer
 }
 
 func NewSSHCollector(logPath string, out chan<- Event) *SSHCollector {
-	lineCh := make(chan string, 500)
+	lineCh := make(chan Line, 500)
 	return &SSHCollector{logPath: logPath, out: out, lineCh: lineCh, tailer: NewTailer(logPath, lineCh)}
 }
 
@@ -35,7 +35,7 @@ func (c *SSHCollector) Stop() {
 
 func (c *SSHCollector) process() {
 	for line := range c.lineCh {
-		ev := c.parse(strings.TrimSpace(line))
+		ev := c.parse(strings.TrimSpace(line.Text))
 		if ev == nil {
 			continue
 		}

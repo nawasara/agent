@@ -57,6 +57,7 @@ type NginxLogPaths struct {
 type ApacheLogPaths struct {
 	Access string `yaml:"access"`
 	Error  string `yaml:"error"`
+	VHosts string `yaml:"vhosts"` // per-domain logs (WHM/cPanel domlogs); host = filename
 }
 
 type AnalyzerConfig struct {
@@ -204,7 +205,7 @@ func defaults() *Config {
 			SSHLog:    "auto",
 			LogPaths: LogPathsConfig{
 				Nginx:   NginxLogPaths{Access: "/var/log/nginx/access.log", Error: "/var/log/nginx/error.log", VHosts: "/var/log/nginx/*_access.log"},
-				Apache:  ApacheLogPaths{Access: "/var/log/apache2/access.log", Error: "/var/log/apache2/error.log"},
+				Apache:  ApacheLogPaths{Access: "/var/log/apache2/access.log", Error: "/var/log/apache2/error.log", VHosts: "/var/log/apache2/domlogs/*"},
 				Caddy:   CaddyLogPaths{Access: "/var/log/caddy/access.log", VHosts: "/var/log/caddy/*.log"},
 				Traefik: TraefikLogPaths{Access: "/var/log/traefik/access.log", VHosts: "/var/log/traefik/*.log"},
 			},

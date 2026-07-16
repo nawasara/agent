@@ -22,11 +22,11 @@ type CaddyCollector struct {
 	out        chan<- Event
 	tailer     *Tailer
 	globTailer *GlobTailer
-	lineCh     chan string
+	lineCh     chan Line
 }
 
 func NewCaddyCollector(logPath string, out chan<- Event) *CaddyCollector {
-	lineCh := make(chan string, 1000)
+	lineCh := make(chan Line, 1000)
 	return &CaddyCollector{logPath: logPath, out: out, lineCh: lineCh, tailer: NewTailer(logPath, lineCh)}
 }
 
@@ -54,7 +54,7 @@ func (c *CaddyCollector) Stop() {
 
 func (c *CaddyCollector) process() {
 	for line := range c.lineCh {
-		entry := c.parse(strings.TrimSpace(line))
+		entry := c.parse(strings.TrimSpace(line.Text))
 		if entry == nil {
 			continue
 		}
@@ -118,6 +118,7 @@ func (c *CaddyCollector) parse(line string) *LogEntry {
 	return &LogEntry{
 		Timestamp:  ts,
 		SourceIP:   ip,
+		Host:       log.Request.Host,
 		Method:     log.Request.Method,
 		Path:       path,
 		Query:      query,

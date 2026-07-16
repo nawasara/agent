@@ -11,7 +11,10 @@ Lightweight security monitoring agent for Linux VMs. Reads web-server access log
 - Heartbeat every 60s with CPU/memory/disk metrics
 - Auto-detects OS, web server, and SSH log path
 - Self-registers with Dashboard on first run (no manual API key setup needed)
-- Glob watcher for per-vhost nginx logs
+- Glob watcher for per-vhost logs — on WHM/cPanel the target domain is derived
+  from each domlog filename (`/var/log/apache2/domlogs/<domain>`), so incidents
+  show which subdomain was attacked; Caddy/Traefik take the host from the log's
+  Host field
 - Runs as a systemd service with CPU/memory limits
 
 ## Requirements

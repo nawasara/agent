@@ -2,9 +2,19 @@ package collector
 
 import "time"
 
+// Line is a raw log line plus the file it was read from. The source path lets a
+// collector derive the vhost/domain when the web server writes per-domain logs
+// (e.g. WHM/cPanel domlogs: /var/log/apache2/domlogs/<domain>), where the Host
+// is the filename rather than a field in the line.
+type Line struct {
+	Text   string
+	Source string // absolute path of the log file this line came from
+}
+
 type LogEntry struct {
 	Timestamp  time.Time
 	SourceIP   string
+	Host       string // target vhost/domain (Host header). Empty if unknown.
 	Method     string
 	Path       string
 	Query      string
@@ -12,7 +22,7 @@ type LogEntry struct {
 	BytesSent  int
 	UserAgent  string
 	Referer    string
-	Source     string // "nginx" | "apache"
+	Source     string // "nginx" | "apache" | "caddy" | "traefik"
 	Raw        string
 }
 

@@ -33,7 +33,7 @@ func (e *Engine) ProcessLog(entry *collector.LogEntry) {
 		if !e.matchLog(rule, entry) {
 			continue
 		}
-		ev := Evidence{Timestamp: entry.Timestamp, Raw: entry.Raw, MatchedRule: rule.ID}
+		ev := Evidence{Timestamp: entry.Timestamp, Host: entry.Host, Raw: entry.Raw, MatchedRule: rule.ID}
 		threshold := rule.Threshold
 		if threshold == 0 {
 			threshold = 20

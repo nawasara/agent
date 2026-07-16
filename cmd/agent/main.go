@@ -170,6 +170,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		startCollector("nginx:"+cfg.Collector.LogPaths.Nginx.Access, c.Start, c.Stop)
 	case "apache":
 		c := collector.NewApacheCollector(cfg.Collector.LogPaths.Apache.Access, eventBus)
+		// WHM/cPanel writes one log per domain under domlogs/; watching them lets
+		// the collector derive the target vhost from each file's name.
+		if cfg.Collector.LogPaths.Apache.VHosts != "" {
+			c.WithVhostGlob(cfg.Collector.LogPaths.Apache.VHosts)
+		}
 		startCollector("apache:"+cfg.Collector.LogPaths.Apache.Access, c.Start, c.Stop)
 	case "caddy", "frankenphp":
 		c := collector.NewCaddyCollector(cfg.Collector.LogPaths.Caddy.Access, eventBus)

@@ -3,6 +3,7 @@ package collector
 import (
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,11 +24,11 @@ type NginxCollector struct {
 	out        chan<- Event
 	tailer     *Tailer
 	globTailer *GlobTailer
-	lineCh     chan string
+	lineCh     chan Line
 }
 
 func NewNginxCollector(logPath string, out chan<- Event) *NginxCollector {
-	lineCh := make(chan string, 1000)
+	lineCh := make(chan Line, 1000)
 	return &NginxCollector{logPath: logPath, source: "nginx", out: out, lineCh: lineCh, tailer: NewTailer(logPath, lineCh)}
 }
 
@@ -55,7 +56,7 @@ func (c *NginxCollector) Stop() {
 
 func (c *NginxCollector) process() {
 	for line := range c.lineCh {
-		entry := c.parse(strings.TrimSpace(line))
+		entry := c.parse(strings.TrimSpace(line.Text), line.Source)
 		if entry == nil {
 			continue
 		}
@@ -66,7 +67,7 @@ func (c *NginxCollector) process() {
 	}
 }
 
-func (c *NginxCollector) parse(line string) *LogEntry {
+func (c *NginxCollector) parse(line, source string) *LogEntry {
 	m := nginxPattern.FindStringSubmatch(line)
 	if m == nil {
 		return nil
@@ -92,6 +93,7 @@ func (c *NginxCollector) parse(line string) *LogEntry {
 	return &LogEntry{
 		Timestamp:  ts,
 		SourceIP:   m[1],
+		Host:       hostFromLogPath(source),
 		Method:     m[3],
 		Path:       path,
 		Query:      query,
@@ -102,4 +104,42 @@ func (c *NginxCollector) parse(line string) *LogEntry {
 		Source:     c.source,
 		Raw:        fmt.Sprintf("%s %s", m[3], rawPath),
 	}
+}
+
+// hostFromLogPath derives the vhost/domain from a per-domain log filename, the
+// convention on WHM/cPanel (/var/log/apache2/domlogs/<domain>) and per-site
+// nginx logs (/var/log/nginx/<domain>_access.log). Combined Log Format lines
+// carry no Host, so the filename is the only signal. Returns "" for the generic
+// combined log (access.log) where the domain is unknown.
+func hostFromLogPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	base := filepath.Base(path)
+
+	// Strip common access-log suffixes to recover the bare domain.
+	for _, suf := range []string{
+		"-ssl_log", "_ssl_log", ".ssl_log",
+		"_access.log", "-access.log", ".access.log",
+		"_access_log", "-access_log",
+		"_access", "-access",
+		".log", "_log",
+	} {
+		if strings.HasSuffix(base, suf) {
+			base = strings.TrimSuffix(base, suf)
+			break
+		}
+	}
+
+	// Generic combined logs carry no domain — don't invent one.
+	switch base {
+	case "access", "other_vhosts_access", "nginx", "apache2", "":
+		return ""
+	}
+
+	// A domain must look like one (has a dot). Guards against odd filenames.
+	if !strings.Contains(base, ".") {
+		return ""
+	}
+	return base
 }

@@ -39,6 +39,7 @@ type Incident struct {
 
 type Evidence struct {
 	Timestamp   time.Time `json:"timestamp"`
+	Host        string    `json:"host,omitempty"` // target vhost/domain, if known
 	Raw         string    `json:"raw"`
 	MatchedRule string    `json:"matched_rule"`
 }

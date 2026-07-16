@@ -10,13 +10,13 @@ import (
 // and tails all matching files. Rescans for new files every scanInterval.
 type GlobTailer struct {
 	Pattern  string
-	Out      chan<- string
+	Out      chan<- Line
 	stopCh   chan struct{}
 	tailers  map[string]*Tailer
 	mu       sync.Mutex
 }
 
-func NewGlobTailer(pattern string, out chan<- string) *GlobTailer {
+func NewGlobTailer(pattern string, out chan<- Line) *GlobTailer {
 	return &GlobTailer{
 		Pattern: pattern,
 		Out:     out,
