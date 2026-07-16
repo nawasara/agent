@@ -1,6 +1,6 @@
 # Nawasara Agent
 
-Lightweight security monitoring agent for Linux VMs. Reads Nginx/Apache access logs and SSH auth logs in realtime, detects attack patterns, and reports incidents to the [Nawasara Dashboard](https://nawasara.ponorogo.go.id).
+Lightweight security monitoring agent for Linux VMs. Reads web-server access logs (Nginx, Apache, Caddy/FrankenPHP, Traefik) and SSH auth logs in realtime, detects attack patterns, and reports incidents to the [Nawasara Dashboard](https://nawasara.ponorogo.go.id).
 
 ## Features
 
@@ -84,7 +84,7 @@ Key fields:
 |---|---|---|
 | `dashboard_url` | — | Nawasara Dashboard base URL (required) |
 | `agent_name` | hostname | Display name in Dashboard |
-| `collector.web_server` | `auto` | `auto`, `nginx`, or `apache` |
+| `collector.web_server` | `auto` | `auto`, `nginx`, `apache`, `caddy`, `frankenphp`, or `traefik` |
 | `collector.ssh_log` | `auto` | `auto`, or explicit path |
 | `reporter.heartbeat_interval` | `60s` | Dashboard marks agent offline after 3× this |
 | `reporter.buffer_db` | `/var/lib/nawasara-agent/buffer.db` | SQLite offline queue |
@@ -141,6 +141,50 @@ Place YAML files in `/etc/nawasara-agent/rules/`. Reloaded every 6 hours (or on 
 ```
 
 Available condition fields: `source` (`web_log`|`ssh_log`), `method`, `path_equals`, `path_contains`, `path_regex`, `query_regex`, `ua_contains`, `status_min`, `status_max`, `event_type`, `per_ip`, `window_seconds`.
+
+## Traefik (reverse-proxy stack)
+
+Apps that sit **behind Traefik** — e.g. `bale-cms` / `dindik-profile`, which expose
+only an internal container port and have no host-level web-server log — are
+monitored by pointing the agent at Traefik's access log. Traefik is the edge, so
+it sees every public request first.
+
+**1. Make Traefik write a JSON access log to a file the host can read.**
+In the Traefik static config (`traefik.yml`):
+
+```yaml
+accessLog:
+  filePath: /var/log/traefik/access.log
+  format: json
+  fields:
+    headers:
+      defaultMode: keep   # keeps request headers (User-Agent, X-Forwarded-For)
+```
+
+When Traefik runs in Docker, bind-mount that path to the host so the agent
+(running on the host) can tail it:
+
+```yaml
+# traefik service
+volumes:
+  - /var/log/traefik:/var/log/traefik
+```
+
+**2. Tell the agent to use it** (`/etc/nawasara-agent/config.yaml`):
+
+```yaml
+collector:
+  web_server: traefik          # or "auto" — detected via /etc/traefik/traefik.yml
+  log_paths:
+    traefik:
+      access: /var/log/traefik/access.log
+      vhosts: /var/log/traefik/*.log   # optional
+```
+
+The collector reads the real client IP from `request_X-Forwarded-For`
+(client-most hop), falling back to `ClientHost` — so incidents point at the
+actual attacker even when Traefik sits behind Cloudflare. All existing detection
+rules apply unchanged.
 
 ## Building from Source
 
@@ -293,6 +337,8 @@ collector/          Read and parse log lines
   tailer.go         tail -F with log-rotation detection
   glob_tailer.go    Watch a glob pattern, add new files automatically
   nginx.go          Combined Log Format parser (nginx + apache)
+  caddy.go          Caddy / FrankenPHP JSON access-log parser
+  traefik.go        Traefik JSON access-log parser (reverse-proxy stack)
   ssh.go            sshd auth log parser
   metrics_linux.go  /proc CPU/mem/disk sampler
 

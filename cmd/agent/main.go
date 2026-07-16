@@ -177,6 +177,12 @@ func runAgent(cmd *cobra.Command, args []string) error {
 			c.WithVhostGlob(cfg.Collector.LogPaths.Caddy.VHosts)
 		}
 		startCollector("caddy:"+cfg.Collector.LogPaths.Caddy.Access, c.Start, c.Stop)
+	case "traefik":
+		c := collector.NewTraefikCollector(cfg.Collector.LogPaths.Traefik.Access, eventBus)
+		if cfg.Collector.LogPaths.Traefik.VHosts != "" {
+			c.WithVhostGlob(cfg.Collector.LogPaths.Traefik.VHosts)
+		}
+		startCollector("traefik:"+cfg.Collector.LogPaths.Traefik.Access, c.Start, c.Stop)
 	}
 
 	if plugins.IsEnabled("ssh") {
@@ -343,6 +349,8 @@ func runAgent(cmd *cobra.Command, args []string) error {
 
 func detectWebServer() string {
 	switch {
+	case fileExists("/var/log/traefik/access.log") || fileExists("/etc/traefik/traefik.yml") || fileExists("/etc/traefik/traefik.yaml") || fileExists("/etc/traefik/traefik.toml"):
+		return "traefik"
 	case fileExists("/var/log/caddy/access.log") || fileExists("/etc/caddy/Caddyfile") || fileExists("/etc/frankenphp/Caddyfile"):
 		return "caddy"
 	case fileExists("/var/log/nginx/access.log") || fileExists("/etc/nginx/nginx.conf"):

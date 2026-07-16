@@ -25,21 +25,27 @@ type Config struct {
 }
 
 type CollectorConfig struct {
-	WebServer       string            `yaml:"web_server"` // auto | nginx | apache
+	WebServer       string            `yaml:"web_server"` // auto | nginx | apache | caddy | traefik
 	LogPaths        LogPathsConfig    `yaml:"log_paths"`
 	SSHLog          string            `yaml:"ssh_log"` // auto | path
 	MetricsInterval time.Duration     `yaml:"metrics_interval"`
 }
 
 type LogPathsConfig struct {
-	Nginx  NginxLogPaths  `yaml:"nginx"`
-	Apache ApacheLogPaths `yaml:"apache"`
-	Caddy  CaddyLogPaths  `yaml:"caddy"`
+	Nginx   NginxLogPaths   `yaml:"nginx"`
+	Apache  ApacheLogPaths  `yaml:"apache"`
+	Caddy   CaddyLogPaths   `yaml:"caddy"`
+	Traefik TraefikLogPaths `yaml:"traefik"`
 }
 
 type CaddyLogPaths struct {
 	Access string `yaml:"access"` // Caddy/FrankenPHP JSON access log
 	VHosts string `yaml:"vhosts"` // optional glob for per-site access logs
+}
+
+type TraefikLogPaths struct {
+	Access string `yaml:"access"` // Traefik JSON access log
+	VHosts string `yaml:"vhosts"` // optional glob for per-router/service logs
 }
 
 type NginxLogPaths struct {
@@ -197,9 +203,10 @@ func defaults() *Config {
 			WebServer: "auto",
 			SSHLog:    "auto",
 			LogPaths: LogPathsConfig{
-				Nginx:  NginxLogPaths{Access: "/var/log/nginx/access.log", Error: "/var/log/nginx/error.log", VHosts: "/var/log/nginx/*_access.log"},
-				Apache: ApacheLogPaths{Access: "/var/log/apache2/access.log", Error: "/var/log/apache2/error.log"},
-				Caddy:  CaddyLogPaths{Access: "/var/log/caddy/access.log", VHosts: "/var/log/caddy/*.log"},
+				Nginx:   NginxLogPaths{Access: "/var/log/nginx/access.log", Error: "/var/log/nginx/error.log", VHosts: "/var/log/nginx/*_access.log"},
+				Apache:  ApacheLogPaths{Access: "/var/log/apache2/access.log", Error: "/var/log/apache2/error.log"},
+				Caddy:   CaddyLogPaths{Access: "/var/log/caddy/access.log", VHosts: "/var/log/caddy/*.log"},
+				Traefik: TraefikLogPaths{Access: "/var/log/traefik/access.log", VHosts: "/var/log/traefik/*.log"},
 			},
 			MetricsInterval: 30 * time.Second,
 		},
