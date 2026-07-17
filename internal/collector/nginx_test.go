@@ -7,8 +7,11 @@ func TestHostFromLogPath(t *testing.T) {
 		// WHM/cPanel domlogs — bare domain filename.
 		"/var/log/apache2/domlogs/example.com":         "example.com",
 		"/var/log/apache2/domlogs/sub.example.com":     "sub.example.com",
-		"/var/log/apache2/domlogs/example.com-ssl_log": "example.com",
-		"/usr/local/apache/domlogs/foo.go.id":          "foo.go.id",
+		"/var/log/apache2/domlogs/example.com-ssl_log":   "example.com",
+		"/usr/local/apache/domlogs/foo.go.id":            "foo.go.id",
+		"/usr/local/apache/domlogs/babadan.ponorogo.go.id":            "babadan.ponorogo.go.id",
+		"/usr/local/apache/domlogs/babadan.ponorogo.go.id-ssl_log":   "babadan.ponorogo.go.id",
+		"/usr/local/apache/domlogs/babadan.ponorogo.go.id-bytes_log": "babadan.ponorogo.go.id",
 		// Per-site nginx logs.
 		"/var/log/nginx/example.com_access.log": "example.com",
 		"/var/log/nginx/example.com-access.log": "example.com",

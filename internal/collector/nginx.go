@@ -28,7 +28,10 @@ type NginxCollector struct {
 }
 
 func NewNginxCollector(logPath string, out chan<- Event) *NginxCollector {
-	lineCh := make(chan Line, 1000)
+	// Large buffer: on WHM/cPanel the vhost glob can attach hundreds of per-domain
+	// tailers feeding this one channel; a small buffer would drop lines (incl.
+	// attacks) under load. process() reads fast, so this is just burst headroom.
+	lineCh := make(chan Line, 20000)
 	return &NginxCollector{logPath: logPath, source: "nginx", out: out, lineCh: lineCh, tailer: NewTailer(logPath, lineCh)}
 }
 
@@ -117,8 +120,12 @@ func hostFromLogPath(path string) string {
 	}
 	base := filepath.Base(path)
 
-	// Strip common access-log suffixes to recover the bare domain.
+	// Strip common access-log suffixes to recover the bare domain. cPanel/WHM
+	// writes <domain>, <domain>-ssl_log and <domain>-bytes_log per site; nginx
+	// per-site logs use <domain>_access.log etc. Longest/most-specific first so
+	// "-bytes_log" isn't left as "-bytes" by an earlier "_log" match.
 	for _, suf := range []string{
+		"-bytes_log", "_bytes_log", "-bytes", "_bytes",
 		"-ssl_log", "_ssl_log", ".ssl_log",
 		"_access.log", "-access.log", ".access.log",
 		"_access_log", "-access_log",

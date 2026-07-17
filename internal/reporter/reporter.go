@@ -169,11 +169,18 @@ func (r *Reporter) Close() {
 func incidentToMap(inc analyzer.Incident) map[string]any {
 	evidence := make([]map[string]any, len(inc.Evidence))
 	for i, e := range inc.Evidence {
-		evidence[i] = map[string]any{
+		m := map[string]any{
 			"timestamp":    e.Timestamp,
 			"raw":          e.Raw,
 			"matched_rule": e.MatchedRule,
 		}
+		// Include the target vhost/domain when known (WHM per-domain logs,
+		// Caddy/Traefik Host). Omitted when empty so file-scan/SSH evidence
+		// (which has no host) stays clean.
+		if e.Host != "" {
+			m["host"] = e.Host
+		}
+		evidence[i] = m
 	}
 	return map[string]any{
 		"incident_id":         inc.ID,

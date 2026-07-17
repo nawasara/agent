@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"log"
 	"path/filepath"
 	"sync"
 	"time"
@@ -59,6 +60,7 @@ func (g *GlobTailer) scan() {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	added := 0
 	for _, path := range matches {
 		if _, exists := g.tailers[path]; exists {
 			continue
@@ -66,5 +68,9 @@ func (g *GlobTailer) scan() {
 		t := NewTailer(path, g.Out)
 		t.Start()
 		g.tailers[path] = t
+		added++
+	}
+	if added > 0 {
+		log.Printf("[glob] %s: watching %d file(s) (+%d new)", g.Pattern, len(g.tailers), added)
 	}
 }
