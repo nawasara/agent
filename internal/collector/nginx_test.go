@@ -31,6 +31,47 @@ func TestHostFromLogPath(t *testing.T) {
 	}
 }
 
+func TestNginxParseVhostFormat(t *testing.T) {
+	c := NewNginxCollector("/dev/null", nil)
+
+	t.Run("vhost_combined: host from the leading $host field", func(t *testing.T) {
+		line := `csirt.ponorogo.go.id 203.0.113.9 - - [16/Jul/2026:10:49:01 +0700] "GET /wp-login.php?a=1 HTTP/1.1" 404 128 "-" "sqlmap/1.5"`
+		// source is the generic combined log (no host in filename) — must come from the line.
+		e := c.parse(line, "/var/log/nginx/access.log")
+		if e == nil {
+			t.Fatal("expected entry")
+		}
+		if e.Host != "csirt.ponorogo.go.id" {
+			t.Errorf("Host = %q, want csirt.ponorogo.go.id (from line)", e.Host)
+		}
+		if e.SourceIP != "203.0.113.9" || e.Method != "GET" || e.Path != "/wp-login.php" || e.StatusCode != 404 {
+			t.Errorf("misparsed vhost line: %+v", e)
+		}
+	})
+
+	t.Run("standard combined still parses (not misread as vhost)", func(t *testing.T) {
+		line := `203.0.113.9 - - [16/Jul/2026:10:49:01 +0700] "POST /x.php HTTP/1.1" 500 10 "-" "curl/8"`
+		e := c.parse(line, "/var/log/nginx/access.log")
+		if e == nil {
+			t.Fatal("expected entry")
+		}
+		if e.SourceIP != "203.0.113.9" {
+			t.Errorf("SourceIP = %q, standard line misparsed as vhost", e.SourceIP)
+		}
+		if e.Host != "" {
+			t.Errorf("Host = %q, want empty for generic access.log", e.Host)
+		}
+	})
+
+	t.Run("vhost with '-' host is treated as unknown", func(t *testing.T) {
+		line := `- 203.0.113.9 - - [16/Jul/2026:10:49:01 +0700] "GET / HTTP/1.1" 200 1 "-" "curl"`
+		e := c.parse(line, "/var/log/nginx/access.log")
+		if e == nil || e.Host != "" {
+			t.Errorf("want empty host for '-' vhost, got %+v", e)
+		}
+	})
+}
+
 func TestNginxParseHostFromSource(t *testing.T) {
 	c := NewNginxCollector("/dev/null", nil)
 	line := `203.0.113.9 - - [16/Jul/2026:10:49:01 +0700] "GET /magento_version HTTP/1.1" 404 128 "-" "sqlmap/1.5"`

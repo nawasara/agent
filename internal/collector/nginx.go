@@ -15,6 +15,19 @@ var nginxPattern = regexp.MustCompile(
 	`^(\S+) - \S+ \[([^\]]+)\] "(\S+) (\S+) \S+" (\d+) (\d+) "([^"]*)" "([^"]*)"`,
 )
 
+// vhost_combined format: a leading $host before the standard combined fields —
+// e.g. log_format vhost '$host $remote_addr - $remote_user [$time_local] ...'.
+// Servers with one shared access.log can opt into this to record the target
+// domain per line (the Combined Log Format alone carries no host). $host is
+// group 1; the rest mirror nginxPattern shifted by one.
+//
+// The 2nd field is constrained to an IPv4/IPv6/`-` (the $remote_addr) so this
+// does NOT ambiguously match a standard Combined line, whose 2nd field is the
+// literal "-" ($remote_user placeholder) — there the address is field 1.
+var nginxVhostPattern = regexp.MustCompile(
+	`^(\S+) ([0-9a-fA-F.:]+) - \S+ \[([^\]]+)\] "(\S+) (\S+) \S+" (\d+) (\d+) "([^"]*)" "([^"]*)"`,
+)
+
 const nginxTimeLayout = "02/Jan/2006:15:04:05 -0700"
 
 type NginxCollector struct {
@@ -71,20 +84,43 @@ func (c *NginxCollector) process() {
 }
 
 func (c *NginxCollector) parse(line, source string) *LogEntry {
-	m := nginxPattern.FindStringSubmatch(line)
-	if m == nil {
-		return nil
+	// Try the vhost_combined format first ($host leads the line). If it matches,
+	// the host comes straight from the log line — this is how non-WHM single-log
+	// setups report the target domain. Otherwise fall back to standard Combined
+	// Log Format, deriving host from the (per-domain) filename.
+	var (
+		host                = ""
+		ipIdx               = 1
+		tsIdx               = 2
+		methodIdx, pathIdx  = 3, 4
+		statusIdx, bytesIdx = 5, 6
+		refIdx, uaIdx       = 7, 8
+	)
+	m := nginxVhostPattern.FindStringSubmatch(line)
+	if m != nil {
+		// vhost_combined: group 1 = $host, remaining fields shifted by one.
+		host = m[1]
+		ipIdx, tsIdx = 2, 3
+		methodIdx, pathIdx = 4, 5
+		statusIdx, bytesIdx = 6, 7
+		refIdx, uaIdx = 8, 9
+	} else {
+		m = nginxPattern.FindStringSubmatch(line)
+		if m == nil {
+			return nil
+		}
+		host = hostFromLogPath(source)
 	}
 
-	ts, err := time.Parse(nginxTimeLayout, m[2])
+	ts, err := time.Parse(nginxTimeLayout, m[tsIdx])
 	if err != nil {
 		ts = time.Now()
 	}
 
-	status, _ := strconv.Atoi(m[5])
-	bytes, _ := strconv.Atoi(m[6])
+	status, _ := strconv.Atoi(m[statusIdx])
+	bytes, _ := strconv.Atoi(m[bytesIdx])
 
-	rawPath := m[4]
+	rawPath := m[pathIdx]
 	parsedURL, _ := url.Parse(rawPath)
 	path := rawPath
 	query := ""
@@ -93,19 +129,24 @@ func (c *NginxCollector) parse(line, source string) *LogEntry {
 		query = parsedURL.RawQuery
 	}
 
+	// A leading "-" or "_" for $host means nginx had no Host header — treat as unknown.
+	if host == "-" || host == "_" {
+		host = ""
+	}
+
 	return &LogEntry{
 		Timestamp:  ts,
-		SourceIP:   m[1],
-		Host:       hostFromLogPath(source),
-		Method:     m[3],
+		SourceIP:   m[ipIdx],
+		Host:       host,
+		Method:     m[methodIdx],
 		Path:       path,
 		Query:      query,
 		StatusCode: status,
 		BytesSent:  bytes,
-		Referer:    m[7],
-		UserAgent:  m[8],
+		Referer:    m[refIdx],
+		UserAgent:  m[uaIdx],
 		Source:     c.source,
-		Raw:        fmt.Sprintf("%s %s", m[3], rawPath),
+		Raw:        fmt.Sprintf("%s %s", m[methodIdx], rawPath),
 	}
 }
 
