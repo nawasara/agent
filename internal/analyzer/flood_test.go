@@ -79,6 +79,37 @@ func TestLoadTesterUADetectedEarly(t *testing.T) {
 	t.Logf("OK: UA load-tester terdeteksi dari 1 request sebagai %s", got[0].Type)
 }
 
+// Skor insiden harus bisa melewati ambang auto-block dashboard (min_score 70).
+// Kasus nyata: scanner_bot lama ber-score 30, insidennya mentok di 60, jadi
+// TIDAK PERNAH bisa diblok otomatis walau occurrence-nya ribuan.
+func TestScannerBotScoreReachesBlockThreshold(t *testing.T) {
+	const dashboardMinScore = 70
+
+	ch := make(chan Incident, 64)
+	e := NewEngine(DefaultRules(), 5*time.Minute, ch)
+
+	// Dua request ber-UA load-tester dari IP yang sama.
+	e.ProcessLog(entryFlood("198.51.100.10", "k6-Load-Tester/1.0"))
+	e.ProcessLog(entryFlood("198.51.100.10", "k6-Load-Tester/1.0"))
+
+	got := drain(ch)
+	if len(got) == 0 {
+		t.Fatal("scanner_bot tidak terdeteksi sama sekali")
+	}
+
+	best := 0
+	for _, inc := range got {
+		if inc.Score > best {
+			best = inc.Score
+		}
+	}
+	if best < dashboardMinScore {
+		t.Fatalf("skor tertinggi %d < %d — insiden tidak akan pernah diblok otomatis",
+			best, dashboardMinScore)
+	}
+	t.Logf("OK: skor mencapai %d (>= ambang blok %d)", best, dashboardMinScore)
+}
+
 // Trafik normal TIDAK boleh memicu flood — jaga agar tidak false positive.
 func TestNormalTrafficDoesNotTrigger(t *testing.T) {
 	ch := make(chan Incident, 64)

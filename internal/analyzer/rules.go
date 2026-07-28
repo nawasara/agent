@@ -72,8 +72,13 @@ func DefaultRules() []Rule {
 			// jarang sah menghantam situs publik dari luar — kalau muncul, hampir
 			// selalu upaya membanjiri. Ini deteksi cepat (satu request sudah cukup);
 			// rule_request_flood tetap jadi jaring pengaman untuk UA yang dipalsukan.
+			// Score 40: dua hit (80) sudah melewati ambang auto-block (min_score 70),
+			// satu hit (40) belum. Sengaja begitu — satu request ber-UA scanner bisa
+			// saja tool audit internal, tapi UA seperti ini tidak pernah muncul dua
+			// kali dari trafik yang sah. Sebelumnya score 30 membuat insiden mentok
+			// di 60 dan tidak pernah bisa diblok otomatis, meski occurrence ribuan.
 			ID: "rule_scanner_bot", Name: "Known Scanner Bot", Category: "scanner_bot",
-			Severity: "high", Score: 30, Threshold: 30, Mitre: "T1595.002",
+			Severity: "high", Score: 40, Threshold: 40, Mitre: "T1595.002",
 			Conditions: Conditions{Source: "web_log", UAContains: []string{
 				"sqlmap", "nikto", "nmap", "masscan", "zgrab", "nuclei", "dirsearch", "gobuster", "ffuf", "wfuzz",
 				"k6-load-tester", "k6/", "vegeta", "wrk/", "siege", "locust", "gatling", "jmeter", "hey/", "artillery",
