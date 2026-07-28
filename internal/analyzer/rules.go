@@ -68,9 +68,16 @@ func DefaultRules() []Rule {
 			Conditions: Conditions{Source: "web_log", QueryRegex: []string{`(?i)<script`, `(?i)javascript:`, `(?i)onerror=`, `(?i)onload=`}},
 		},
 		{
+			// Dua kelompok UA: pemindai kerentanan, lalu alat load-test. Yang kedua
+			// jarang sah menghantam situs publik dari luar — kalau muncul, hampir
+			// selalu upaya membanjiri. Ini deteksi cepat (satu request sudah cukup);
+			// rule_request_flood tetap jadi jaring pengaman untuk UA yang dipalsukan.
 			ID: "rule_scanner_bot", Name: "Known Scanner Bot", Category: "scanner_bot",
 			Severity: "high", Score: 30, Threshold: 30, Mitre: "T1595.002",
-			Conditions: Conditions{Source: "web_log", UAContains: []string{"sqlmap", "nikto", "nmap", "masscan", "zgrab", "nuclei", "dirsearch", "gobuster", "ffuf", "wfuzz"}},
+			Conditions: Conditions{Source: "web_log", UAContains: []string{
+				"sqlmap", "nikto", "nmap", "masscan", "zgrab", "nuclei", "dirsearch", "gobuster", "ffuf", "wfuzz",
+				"k6-load-tester", "k6/", "vegeta", "wrk/", "siege", "locust", "gatling", "jmeter", "hey/", "artillery",
+			}},
 		},
 		{
 			// POST to an upload directory with a .php extension in the path
@@ -92,6 +99,27 @@ func DefaultRules() []Rule {
 			ID: "rule_4xx_storm", Name: "HTTP 4xx Storm", Category: "4xx_storm",
 			Severity: "medium", Score: 2, Threshold: 100, Mitre: "T1595",
 			Conditions: Conditions{Source: "web_log", StatusMin: 400, StatusMax: 499, PerIP: true, WindowSeconds: 30},
+		},
+		{
+			// Volumetrik murni: banyak request dari SATU IP dalam waktu singkat,
+			// apa pun status code, path, dan User-Agent-nya.
+			//
+			// Ini menutup celah yang tidak tertangkap rule lain. Kasus nyata
+			// (csirt.ponorogo.go.id, Juli 2026): satu IP membanjiri "GET /" yang
+			// semuanya dijawab 200 OK. rule_4xx_storm tidak kena karena bukan 4xx,
+			// rule_scanner_bot tidak kena karena UA-nya tidak ada di daftar, dan
+			// tidak ada payload SQLi/XSS/traversal untuk dicocokkan. Semua rule
+			// lain memeriksa *bentuk* request; hanya rule ini yang memeriksa
+			// *volume*.
+			//
+			// Ambang: 300 request / 60 detik / IP (skor 1 × threshold 300). Jauh di
+			// atas pemakaian manusia wajar — satu halaman berat dengan puluhan aset
+			// statis masih aman, terlebih aset umumnya dilayani CDN dan tidak
+			// mencapai origin. Naikkan bila ada klien sah yang memang burst tinggi
+			// (mis. mesin sinkronisasi antar-OPD).
+			ID: "rule_request_flood", Name: "HTTP Request Flood", Category: "request_flood",
+			Severity: "high", Score: 1, Threshold: 300, Mitre: "T1498.001",
+			Conditions: Conditions{Source: "web_log", PerIP: true, WindowSeconds: 60},
 		},
 		{
 			ID: "rule_ssh_brute", Name: "SSH Brute Force", Category: "brute_force",

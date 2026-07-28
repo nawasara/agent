@@ -115,9 +115,17 @@ func (e *Engine) matchLog(rule Rule, entry *collector.LogEntry) bool {
 		return false
 	}
 
-	// Must have matched at least something.
+	// Must have matched at least something — a rule with no conditions at all
+	// would otherwise match every request and fire constantly.
+	//
+	// Exception: purely volumetric rules (per-IP counting over a window, e.g.
+	// rule_request_flood) deliberately carry no path/query/UA/status condition.
+	// Their selectivity comes from the count threshold, not from the shape of
+	// any single request — a flood of plain "GET / 200" is exactly the case the
+	// other rules cannot see. Treat PerIP as a valid condition of its own.
 	hasPath := len(c.PathEquals) > 0 || len(c.PathContains) > 0 || len(c.PathRegex) > 0
-	return hasPath || hasExtra
+	isVolumetric := c.PerIP && c.WindowSeconds > 0
+	return hasPath || hasExtra || isVolumetric
 }
 
 // matchPathConditions checks path-based conditions.
