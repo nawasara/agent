@@ -5,7 +5,8 @@ Lightweight security monitoring agent for Linux VMs. Reads web-server access log
 ## Features
 
 - Real-time log tailing with log-rotation awareness
-- 12 built-in attack detection rules (SQL injection, XSS, brute force, webshell upload, scanner bots, SSH attacks, and more)
+- 13 built-in attack detection rules (SQL injection, XSS, brute force, webshell
+  upload, scanner bots and load-test tools, request floods, SSH attacks, and more)
 - Per-IP sliding window score accumulation — fires incident only when threshold is reached
 - SQLite offline buffer — incidents queued locally when Dashboard is unreachable, retried automatically
 - Heartbeat every 60s with CPU/memory/disk metrics
