@@ -96,13 +96,27 @@ func (e *Executor) fetchPending() ([]Command, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
+		// Decode command-by-command so one malformed entry cannot discard the
+		// whole batch. A dashboard that serialised empty params as [] instead
+		// of {} used to stall every pending command behind the bad one — a
+		// legitimate unblock sat unexecuted while the IP stayed dropped.
 		var body struct {
-			Commands []Command `json:"commands"`
+			Commands []json.RawMessage `json:"commands"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 			return nil, fmt.Errorf("decode commands: %w", err)
 		}
-		return body.Commands, nil
+
+		cmds := make([]Command, 0, len(body.Commands))
+		for i, raw := range body.Commands {
+			var c Command
+			if err := json.Unmarshal(raw, &c); err != nil {
+				log.Printf("[executor] skipping malformed command at index %d: %v", i, err)
+				continue
+			}
+			cmds = append(cmds, c)
+		}
+		return cmds, nil
 	}
 	return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 }
