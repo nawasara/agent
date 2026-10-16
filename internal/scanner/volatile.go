@@ -6,10 +6,11 @@ import "strings"
 // page caches, logs, sessions, compiled templates. A hash change there is the
 // application working, not an intrusion.
 //
-// Measured on alpine (WHM) in October 2026: 29,150 of 29,856 open findings were
-// file_integrity, almost all WP Super Cache pages and per-day log files. The
-// 131 judol pages the scanner had correctly found were buried among them and
-// nobody noticed for three months.
+// Measured on alpine (WHM), 16 Oct 2026: of 29,263 open integrity findings only
+// 1,818 were caches/logs. Most (27,445) were WordPress core and plugin files
+// changed by updates; those are NOT listed here, because wp-includes and
+// plugins are exactly where backdoors are planted. Separating updates from
+// tampering needs WordPress checksums, not a path list.
 //
 // Only the INTEGRITY check skips these. The signature scan still reads every
 // file, so spam or a webshell planted inside a cache dir is still reported.
