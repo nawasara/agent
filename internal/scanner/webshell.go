@@ -17,6 +17,11 @@ type ScanResult struct {
 	Description string
 	Mitre       string // MITRE ATT&CK technique ID
 	MatchedLine string // first matching snippet (truncated to 120 chars)
+
+	// Lines around the match, credentials redacted (see context.go).
+	Context          string
+	ContextStartLine int
+	MatchLine        int
 }
 
 // maxScanBytes is the read limit per file — large files are read in chunks up
@@ -77,9 +82,17 @@ func (s *WebshellScanner) ScanFile(path string) ([]ScanResult, error) {
 					break // one result per signature per file
 				}
 				seen[cs.sig.ID] = true
-				loc := re.re.Find(data)
-				snippet := sanitize(loc)
+				idx := re.re.FindIndex(data)
+				var snippet, ctx string
+				var ctxStart, matchLine int
+				if idx != nil {
+					snippet = redact(sanitize(data[idx[0]:idx[1]]))
+					ctx, ctxStart, matchLine = extractContext(data, idx[0])
+				}
 				results = append(results, ScanResult{
+					Context:          ctx,
+					ContextStartLine: ctxStart,
+					MatchLine:        matchLine,
 					Path:        path,
 					SignatureID: cs.sig.ID,
 					SigName:     cs.sig.Name,

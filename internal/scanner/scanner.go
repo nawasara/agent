@@ -220,6 +220,10 @@ func (s *Scanner) emitFinding(r ScanResult, info os.FileInfo) {
 		"description":     r.Description,
 		"mitre_technique": r.Mitre,
 		"matched_line":    r.MatchedLine,
+		// Dashboards before secscan v0.18 ignore unknown keys.
+		"context":            r.Context,
+		"context_start_line": r.ContextStartLine,
+		"match_line":         r.MatchLine,
 		"file_size":       info.Size(),
 		"file_mtime":      info.ModTime().Unix(),
 		"detected_at":     time.Now().Unix(),
