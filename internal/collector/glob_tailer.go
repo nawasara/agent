@@ -2,6 +2,7 @@ package collector
 
 import (
 	"log"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -63,6 +64,13 @@ func (g *GlobTailer) scan() {
 	added := 0
 	for _, path := range matches {
 		if _, exists := g.tailers[path]; exists {
+			continue
+		}
+		// Only regular files. A Docker bind mount to a log file that did not
+		// exist yet creates a DIRECTORY with that name; on Bale-Production
+		// /var/log/traefik/access.log was one, matched *.log, and the tailer
+		// spun on "read: invalid argument" ~230 times a second.
+		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		t := NewTailer(path, g.Out)
