@@ -311,6 +311,10 @@ func defaultSignatures() *SignatureDB {
 					`(?i)maxwin`,
 					`(?i)bonus\s+new\s+member`,
 					`(?i)(sbobet|pragmatic\s+play|pgsoft|pg\s+soft)`,
+					// Brand names like slot777 / slot88 — written WITHOUT a
+					// space; "slot 30 menit" in an agenda must not match.
+					`(?i)\bslot\d{2,4}\b`,
+					`(?i)link\s+(resmi\s+)?anti\s+blokir`,
 				},
 			},
 		},

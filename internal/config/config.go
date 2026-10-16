@@ -95,6 +95,10 @@ type ScannerConfig struct {
 	ScanInterval time.Duration `yaml:"scan_interval"`
 	WebDirs      []string      `yaml:"web_dirs"`
 	WatchPaths   []string      `yaml:"watch_paths"`
+	// Extra path substrings excluded from the integrity check (added to the
+	// built-in volatile list in scanner/volatile.go). Signature scanning still
+	// runs on them — a judol page dropped into a cache dir is still caught.
+	IntegrityIgnore []string `yaml:"integrity_ignore"`
 	SignaturesDB string        `yaml:"signatures_db"` // path to JSON signature file; empty = built-in defaults
 	HashDB       string        `yaml:"hash_db"`       // path to SQLite hash database
 }

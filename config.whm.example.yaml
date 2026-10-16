@@ -84,6 +84,15 @@ scanner:
   web_dirs:
     - /home/*/public_html
     - /home2/*/public_html          # hapus kalau tidak ada /home2
+    # Addon domain / subdomain cPanel modern punya docroot SENDIRI di luar
+    # public_html (mis. /home/akun/umum.ponorogo.go.id). Cek dengan:
+    #   grep -h documentroot /var/cpanel/userdata/*/* | sort -u
+    # lalu tambahkan polanya. Symlink tidak diikuti pemindai, jadi docroot
+    # Laravel yang di-symlink harus didaftarkan ke path aslinya.
+    # - /home/*/*.ponorogo.go.id
+  # Path tambahan yang dilewati pemeriksaan integritas (cache/log bawaan sudah
+  # dilewati — lihat internal/scanner/volatile.go). Signature tetap dipindai.
+  integrity_ignore: []
   # File kritis yang di-watch perubahan hash-nya.
   # wp-config.php / .env per akun TIDAK perlu didaftarkan — semua file di
   # web_dirs otomatis masuk baseline integrity saat scan.

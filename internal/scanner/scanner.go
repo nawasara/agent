@@ -155,6 +155,10 @@ func (s *Scanner) scanDir(ctx context.Context, dir string) (files, findings int)
 		}
 
 		// --- Integrity check for web files ---
+		// Caches and logs rewrite themselves; see volatile.go.
+		if isVolatilePath(path, s.cfg.Scanner.IntegrityIgnore) {
+			return nil
+		}
 		change, intErr := s.hashDB.CheckFile(path)
 		if intErr != nil || change == nil {
 			return nil
