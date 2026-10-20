@@ -72,25 +72,69 @@ func unblockIP(params map[string]any) (string, error) {
 	return iptablesUnblock(ip)
 }
 
+// dockerUserChain reports whether Docker's DOCKER-USER chain exists.
+//
+// It matters because on a Docker host the INPUT chain does not see traffic
+// destined for containers — that goes through FORWARD, and Docker inserts its
+// own ACCEPT rules there. A block placed only in INPUT therefore looks applied,
+// reports success, and stops nothing: the attacker keeps reaching every
+// published container port.
+//
+// DOCKER-USER is the one chain Docker guarantees it will not rewrite, and it is
+// evaluated before Docker's own rules. It is the correct place for this.
+func dockerUserChain() bool {
+	return runCmd("iptables", "-L", "DOCKER-USER", "-n") == nil
+}
+
 func iptablesBlock(ip string) (string, error) {
 	// Check if rule already exists to avoid duplicates
 	check := runCmd("iptables", "-C", "INPUT", "-s", ip, "-j", "DROP")
-	if check == nil {
-		return fmt.Sprintf("iptables: %s already blocked", ip), nil
+	if check != nil {
+		if err := runCmd("iptables", "-I", "INPUT", "1", "-s", ip, "-j", "DROP"); err != nil {
+			return "", fmt.Errorf("iptables block: %w", err)
+		}
 	}
-	if err := runCmd("iptables", "-I", "INPUT", "1", "-s", ip, "-j", "DROP"); err != nil {
-		return "", fmt.Errorf("iptables block: %w", err)
+
+	chains := "INPUT"
+
+	// Also block traffic heading for containers. Without this, a host running
+	// Docker accepts the attacker on every published port while the dashboard
+	// shows the IP as blocked.
+	if dockerUserChain() {
+		if runCmd("iptables", "-C", "DOCKER-USER", "-s", ip, "-j", "DROP") != nil {
+			if err := runCmd("iptables", "-I", "DOCKER-USER", "1", "-s", ip, "-j", "DROP"); err != nil {
+				// The INPUT rule is already in place, so report what did happen
+				// rather than failing outright — a partial block still helps,
+				// and saying so is better than a silent half-measure.
+				return fmt.Sprintf("iptables: blocked %s (INPUT only — DOCKER-USER failed: %v)", ip, err), nil
+			}
+		}
+		chains = "INPUT+DOCKER-USER"
 	}
+
 	// Persist via iptables-save if available
 	_ = runCmd("iptables-save")
-	return fmt.Sprintf("iptables: blocked %s (INPUT DROP)", ip), nil
+
+	return fmt.Sprintf("iptables: blocked %s (%s DROP)", ip, chains), nil
 }
 
 func iptablesUnblock(ip string) (string, error) {
-	if err := runCmd("iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"); err != nil {
-		return "", fmt.Errorf("iptables unblock: %w", err)
+	// Remove from both chains. Deleting a rule that is not there returns an
+	// error, so neither is treated as fatal on its own — what matters is that
+	// no DROP for this IP is left behind anywhere.
+	errInput := runCmd("iptables", "-D", "INPUT", "-s", ip, "-j", "DROP")
+
+	var errDocker error
+	if dockerUserChain() {
+		errDocker = runCmd("iptables", "-D", "DOCKER-USER", "-s", ip, "-j", "DROP")
 	}
+
+	if errInput != nil && (errDocker != nil || !dockerUserChain()) {
+		return "", fmt.Errorf("iptables unblock: %w", errInput)
+	}
+
 	_ = runCmd("iptables-save")
+
 	return fmt.Sprintf("iptables: unblocked %s", ip), nil
 }
 
