@@ -10,6 +10,14 @@ manual key handling.
 
 ## How registration works
 
+> **Since the 15 October 2026 security audit, self-registration fails:** the
+> Dashboard requires a one-time enrollment token on `POST /api/agent/register`,
+> and the agent binary does not send one yet. Until it does, pre-provision:
+> create a token in Keamanan > Agen, register once with
+> `curl -X POST $NAWASARA_URL/api/agent/register -H 'Content-Type: application/json' -H 'X-Enrollment-Token: nwe_...' -d '{"name":"...","hostname":"..."}'`,
+> then set `NAWASARA_AGENT_ID` / `NAWASARA_API_KEY` from the response and
+> approve the agent in the Dashboard.
+
 On first start the agent finds `agent_id` empty, calls `POST /api/agent/register`
 on the Dashboard, and writes the returned `agent_id` + `api_key` into the
 `*-config` volume. Restarts reuse that identity. **Nothing to paste** — just set

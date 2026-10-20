@@ -1,0 +1,123 @@
+# Nawasara Agent — Apache + Laravel + SSH
+#
+# Untuk VM/LXC yang menjalankan aplikasi Laravel di belakang Apache (mod_php
+# atau php-fpm), bukan WHM/cPanel. Untuk WHM pakai config.whm.example.yaml.
+#
+# Pasang ke /etc/nawasara-agent/config.yaml lalu:
+#   systemctl restart nawasara-agent
+#   tail -f /var/log/nawasara-agent/agent.log
+#
+# WAJIB DISESUAIKAN sebelum jalan:
+#   1. agent_name           — nama host di dashboard
+#   2. plugins.laravel.log_paths — path storage/logs aplikasi
+#   3. scanner.web_dirs / watch_paths — root aplikasi
+#   4. plugins.ssl.hosts    — domain yang dilayani
+
+# ─── Identity ────────────────────────────────────────────────────────────────
+
+# Kosongkan keduanya pada instalasi baru — agent self-register saat pertama
+# jalan lalu menulis agent_id ke file ini sendiri.
+api_key: ""
+agent_id: ""
+
+dashboard_url: https://nawasara.ponorogo.go.id
+agent_name: apache-laravel-01
+
+# ─── Collector ───────────────────────────────────────────────────────────────
+
+collector:
+  web_server: apache
+
+  # Debian/Ubuntu: /var/log/auth.log — RHEL/CentOS: /var/log/secure.
+  # "auto" mencoba keduanya berurutan.
+  ssh_log: auto
+
+  metrics_interval: 30s
+
+  log_paths:
+    apache:
+      access: /var/log/apache2/access.log
+      error: /var/log/apache2/error.log
+
+# ─── Analyzer ────────────────────────────────────────────────────────────────
+
+analyzer:
+  rules_dir: /etc/nawasara-agent/rules/
+  rules_sync_interval: 6h
+  correlation_window: 5m
+  default_threshold: 20
+
+# ─── Reporter ────────────────────────────────────────────────────────────────
+
+reporter:
+  push_timeout: 10s
+  retry_interval: 30s
+  buffer_db: /var/lib/nawasara-agent/buffer.db
+  buffer_max_age: 168h
+  buffer_max_size_mb: 100
+  heartbeat_interval: 60s
+
+# ─── Executor ────────────────────────────────────────────────────────────────
+
+# Aksi remote tetap mati. Nyalakan hanya kalau memang ingin dashboard boleh
+# me-restart layanan di host ini; setiap perintah tetap perlu persetujuan admin.
+executor:
+  enabled: false
+  poll_interval: 30s
+  allowed_actions:
+    - block_ip
+    - unblock_ip
+    - restart_apache
+    - restart_php_fpm
+    - artisan_queue_restart
+    - artisan_optimize_clear
+
+# ─── Plugins ─────────────────────────────────────────────────────────────────
+
+plugins:
+  dir: /etc/nawasara-agent/plugins/available/
+
+  # Hanya empat nama ini yang dibaca kode (cmd/agent/main.go): ssh, ssl,
+  # docker, laravel. Web server TIDAK didaftarkan di sini — dia dipilih lewat
+  # collector.web_server di atas. Menulis "- apache" di sini tidak berefek apa pun.
+  enabled:
+    - ssh
+    - laravel
+    - ssl
+
+  ssl:
+    # Isi domain yang dilayani host ini — kosong = tidak ada yang dicek.
+    hosts: []
+      # - app.ponorogo.go.id
+    check_interval: 12h
+    warn_days: 30
+    crit_days: 7
+
+  laravel:
+    # Kosong = auto-detect lokasi umum. Isi eksplisit kalau aplikasi tidak di
+    # /var/www/html, atau kalau ada lebih dari satu aplikasi di host ini.
+    log_paths: []
+      # - /var/www/html/storage/logs/laravel.log
+
+# ─── Scanner ─────────────────────────────────────────────────────────────────
+
+# Dinyalakan karena host ini menyimpan file web — di sinilah webshell mendarat.
+scanner:
+  enabled: true
+  scan_interval: 6h
+
+  web_dirs:
+    - /var/www
+
+  # Perubahan hash pada file ini memicu insiden file_integrity_modified.
+  # .env paling penting: berisi APP_KEY dan kredensial DB.
+  watch_paths:
+    - /var/www/html/.env
+    - /var/www/html/composer.json
+    - /var/www/html/composer.lock
+    - /var/www/html/public/index.php
+    - /etc/apache2/apache2.conf
+    - /etc/nawasara-agent/config.yaml
+
+  signatures_db: ""
+  hash_db: /var/lib/nawasara-agent/hashes.db

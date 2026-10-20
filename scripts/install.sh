@@ -1,13 +1,17 @@
 #!/bin/bash
 # Nawasara Agent — one-liner installer
-# Usage: curl -sSL https://nawasara.ponorogo.go.id/agent/install.sh | bash
-# Or non-interactive:
-#   NAWASARA_API_KEY=nwa_xxx NAWASARA_URL=https://... NAWASARA_AGENT_NAME=web-xxx bash install.sh
+# Usage (buat token pendaftaran dulu di Nawasara > Keamanan > Agen):
+#   NAWASARA_ENROLLMENT_TOKEN=nwe_xxx NAWASARA_URL=https://... NAWASARA_AGENT_NAME=web-xxx bash install.sh
+#
+# Sejak audit keamanan 15 Oktober 2026 (T1) /api/agent/register menolak
+# pendaftaran tanpa token sekali pakai, dan agen baru menunggu persetujuan
+# admin sebelum insidennya dapat memicu blokir IP.
 
 set -euo pipefail
 
 AGENT_VERSION="${NAWASARA_AGENT_VERSION:-latest}"
 DASHBOARD_URL="${NAWASARA_URL:-https://nawasara.ponorogo.go.id}"
+ENROLLMENT_TOKEN="${NAWASARA_ENROLLMENT_TOKEN:-}"
 API_KEY="${NAWASARA_API_KEY:-}"
 AGENT_NAME="${NAWASARA_AGENT_NAME:-$(hostname)}"
 INSTALL_DIR="/usr/local/bin"
@@ -36,11 +40,17 @@ esac
 
 info "Nawasara Agent installer — OS=$OS ARCH=$ARCH"
 
-# Prompt for API key if not set
-if [ -z "$API_KEY" ]; then
-  read -rp "Enter your Nawasara API key (nwa_...): " API_KEY
-  [ -z "$API_KEY" ] && error "API key required"
+# Token pendaftaran wajib (dibuat admin di halaman Agen, sekali pakai).
+if [ -z "$ENROLLMENT_TOKEN" ]; then
+  if [ -t 0 ]; then
+    read -rp "Enter your Nawasara enrollment token (nwe_...): " ENROLLMENT_TOKEN
+  fi
+  [ -z "$ENROLLMENT_TOKEN" ] && error "Enrollment token required (NAWASARA_ENROLLMENT_TOKEN). Create one in Nawasara > Keamanan > Agen."
 fi
+case "$ENROLLMENT_TOKEN" in
+  nwe_*) ;;
+  *) error "Enrollment token must start with nwe_" ;;
+esac
 
 # Download binary
 # Primary: via Dashboard proxy (handles version resolution + redirect to GitHub Releases)
@@ -109,13 +119,15 @@ chmod 600 "$CONFIG"
 info "Config written: $CONFIG"
 
 # Register agent with Dashboard
-# /api/agent/register is an open endpoint (no auth needed — api_key is returned by this call)
+# /api/agent/register butuh token pendaftaran (header X-Enrollment-Token);
+# api_key dikembalikan oleh panggilan ini.
 info "Registering agent with Dashboard..."
 HOSTNAME_FULL=$(hostname -f 2>/dev/null || hostname)
 OS_FULL=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d'"' -f2 || echo "$OS")
 IP_LOCAL=$(hostname -I 2>/dev/null | awk '{print $1}')
 REG_RESPONSE=$(curl -s -X POST "$DASHBOARD_URL/api/agent/register" \
   -H "Content-Type: application/json" \
+  -H "X-Enrollment-Token: $ENROLLMENT_TOKEN" \
   -d "{
     \"name\":\"$AGENT_NAME\",
     \"hostname\":\"$HOSTNAME_FULL\",
@@ -136,10 +148,11 @@ if [ -n "$AGENT_ID" ] && [ -n "$NEW_API_KEY" ]; then
   chmod 600 "$CONFIG"
   info "Registered: agent_id=$AGENT_ID"
   info "API key saved to config (keep this file secure — key will not be shown again)"
+  info "Agen menunggu persetujuan admin di halaman Agen sebelum insidennya dapat memicu blokir."
 else
-  warn "Registration failed. Check that $DASHBOARD_URL is reachable."
+  warn "Registration failed. Check that $DASHBOARD_URL is reachable and the enrollment token is valid, unused, and not expired."
   warn "Response: $REG_RESPONSE"
-  warn "You can register manually: curl -X POST $DASHBOARD_URL/api/agent/register -H 'Content-Type: application/json' -d '{\"name\":\"$AGENT_NAME\",...}'"
+  warn "Create a new token in Nawasara > Keamanan > Agen and re-run with NAWASARA_ENROLLMENT_TOKEN=nwe_..."
 fi
 
 # Install systemd service
