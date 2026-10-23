@@ -309,6 +309,37 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
+	// Versi PHP di host ini (pemantau versi PHP secscan). Dikumpulkan saat
+	// mulai lalu tiap 6 jam, dan hanya ikut heartbeat sesudah pengumpulan
+	// baru: versi PHP jarang berubah, dan menulis ulang inventaris tiap menit
+	// tidak menambah apa pun.
+	var (
+		phpRuntimesMu    sync.Mutex
+		phpRuntimes      []collector.PHPRuntime
+		phpRuntimesFresh bool
+	)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		collect := func() {
+			rt := collector.CollectPHPRuntimes(ctx)
+			phpRuntimesMu.Lock()
+			phpRuntimes, phpRuntimesFresh = rt, true
+			phpRuntimesMu.Unlock()
+		}
+		collect()
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				collect()
+			}
+		}
+	}()
+
 	// Heartbeat
 	wg.Add(1)
 	go func() {
@@ -334,7 +365,19 @@ func runAgent(cmd *cobra.Command, args []string) error {
 				rc, rh := recentCritical, recentHigh
 				recentIncidentsMu.Unlock()
 				score := health.Calculate(m.CPUPercent, float64(m.MemUsedMB)/float64(max(m.MemTotalMB, 1))*100, m.DiskUsedPct, rc, rh)
-				rep.SendHeartbeat(m, plugins.Active(), rep.PendingCount(), score)
+				phpRuntimesMu.Lock()
+				var rt []collector.PHPRuntime
+				if phpRuntimesFresh {
+					rt = phpRuntimes
+				}
+				phpRuntimesMu.Unlock()
+				// Gagal kirim = coba lagi di heartbeat berikutnya, bukan
+				// menunggu 6 jam.
+				if err := rep.SendHeartbeat(m, plugins.Active(), rep.PendingCount(), score, rt); err == nil && rt != nil {
+					phpRuntimesMu.Lock()
+					phpRuntimesFresh = false
+					phpRuntimesMu.Unlock()
+				}
 			}
 		}
 	}()

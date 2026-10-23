@@ -71,8 +71,13 @@ func (r *Reporter) Send(inc analyzer.Incident) {
 }
 
 // SendHeartbeat posts a heartbeat to the Dashboard.
-func (r *Reporter) SendHeartbeat(metrics *collector.SystemMetrics, plugins []string, pendingCount int, score float64) {
-	payload, _ := json.Marshal(map[string]any{
+//
+// phpRuntimes nil = kunci php_runtimes tidak dikirim (server membiarkan
+// inventarisnya). Daftar kosong = host ini memang tanpa PHP, dan server
+// membuang baris lamanya. Karena itu nil hanya dipakai di antara dua
+// pengumpulan, bukan untuk "tidak ada PHP".
+func (r *Reporter) SendHeartbeat(metrics *collector.SystemMetrics, plugins []string, pendingCount int, score float64, phpRuntimes []collector.PHPRuntime) error {
+	body := map[string]any{
 		"agent_version":     Version,
 		"uptime_seconds":    int(time.Since(startTime).Seconds()),
 		"pending_incidents": pendingCount,
@@ -83,10 +88,16 @@ func (r *Reporter) SendHeartbeat(metrics *collector.SystemMetrics, plugins []str
 			"mem_used_mb":       metrics.MemUsedMB,
 			"disk_used_percent": metrics.DiskUsedPct,
 		},
-	})
+	}
+	if phpRuntimes != nil {
+		body["php_runtimes"] = phpRuntimes
+	}
+	payload, _ := json.Marshal(body)
 	if err := r.post("/api/agent/heartbeat", payload); err != nil {
 		log.Printf("reporter: heartbeat failed: %v", err)
+		return err
 	}
+	return nil
 }
 
 // RetryLoop flushes buffered incidents. Call in a goroutine.

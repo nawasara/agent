@@ -19,10 +19,11 @@ Current release: **v0.13.0**.
 | Web logs | Combined / vhost_combined (Nginx, Apache), JSON (Caddy, FrankenPHP, Traefik). Log rotation aware; per-vhost glob tailing |
 | Target domain | From the `$host` field (vhost_combined, Caddy, Traefik) or the per-domain log filename (WHM/cPanel domlogs) |
 | SSH | Failed logins and accepted root logins from `auth.log` / `secure` |
-| Detection | 13 built-in rules with per-IP sliding-window scoring; custom YAML rules |
+| Detection | 16 built-in rules with per-IP scoring; custom YAML rules |
 | File scanner | Webshell, backdoor, exploit-artifact and SEO-spam signatures; file integrity hashing |
 | Plugins | Laravel log, Docker container health, TLS certificate expiry |
 | Metrics | CPU, memory, disk in every heartbeat (default 60s) |
+| PHP inventory | PHP versions on the host, cPanel ea-php, CloudLinux alt-php and inside Docker containers; collected at start and every 6 hours, sent with the next heartbeat (Dashboard: Keamanan → Versi PHP) |
 | Offline buffer | SQLite queue when the Dashboard is unreachable, retried automatically |
 | Remote actions | Optional executor for admin-approved commands (off by default) |
 
@@ -201,8 +202,19 @@ back to `ClientHost`.
 
 ## Detection rules
 
-Built in, no configuration needed. A rule fires when the per-IP score reaches
-its threshold within the window.
+Built in, no configuration needed.
+
+Most rules add to one **shared score per IP** and fire when that total reaches
+their threshold. The shared score holds every rule's points until the IP has
+been idle for the correlation window (5 minutes), and three or more categories
+from one IP become a critical `exploit_chain`. Auto-blocking of scanners
+currently depends on that behaviour, so it is left as is.
+
+Rules marked **isolated** count only their own matches, per IP, inside their
+own `window_seconds`, and never join the shared score or `exploit_chain`. Use
+it for low-threshold rules: on the shared score an active visitor slowly
+collects `request_flood` points, and a rule with threshold 10 would fire on a
+single event.
 
 | Rule | Category | Severity | Fires on |
 |---|---|---|---|
@@ -217,8 +229,16 @@ its threshold within the window.
 | HTTP login brute force | `brute_force` | high | 10 POSTs to a login path from one IP in 60s |
 | HTTP 4xx storm | `4xx_storm` | medium | 50 responses 4xx from one IP in 30s |
 | HTTP request flood | `request_flood` | high | 300 requests from one IP in 60s |
+| Oversized body, repeated (isolated) | `oversized_body` | medium | 3 responses 413 from one IP in 5 minutes |
+| POST 500 storm (isolated) | `server_error_storm` | high | 15 POSTs answered 500 from one IP in 60s |
+| PHP worker crash (isolated) | `php_worker_crash` | high | 10 responses 502 from one IP in 60s |
 | SSH brute force | `brute_force` | high | 10 failed logins from one IP in 5 minutes |
 | SSH root login accepted | `ssh_root_login` | critical | Any successful root login |
+
+The three isolated rules came from PHP2Shell (CVE-2026-109618/109619,
+October 2026): the attack runs below the application, so the access log
+status codes are most of what is left. They are not in the Dashboard's
+blockable list, because 502 also appears during a redeploy.
 
 Which categories can lead to an automatic block, and the whitelist (office
 range, private and Cloudflare ranges), are decided by the Dashboard's
@@ -245,7 +265,8 @@ restart:
 
 Conditions: `source` (`web_log` | `ssh_log`), `method`, `path_equals`,
 `path_contains`, `path_regex`, `query_regex`, `ua_contains`, `status_min`,
-`status_max`, `event_type`, `per_ip`, `window_seconds`.
+`status_max`, `event_type`, `per_ip`, `window_seconds`. Rule-level:
+`isolated: true` (see above).
 
 ## File scanner
 
