@@ -126,6 +126,41 @@ func DefaultRules() []Rule {
 			Severity: "high", Score: 1, Threshold: 300, Mitre: "T1498.001",
 			Conditions: Conditions{Source: "web_log", PerIP: true, WindowSeconds: 60},
 		},
+		// Tiga aturan berikut lahir dari PHP2Shell (CVE-2026-109618/109619,
+		// Oktober 2026). Serangannya terjadi di bawah aplikasi: PHP kehabisan
+		// memori saat membaca kiriman, atau worker PHP-FPM tumbang. Log
+		// aplikasi nyaris kosong, dan yang tersisa hanya jejak di access log:
+		// 413, 500, dan 502 yang menumpuk dari satu IP.
+		//
+		// Ketiganya TIDAK masuk daftar blokir otomatis di server. 502 juga
+		// muncul saat aplikasi di-deploy ulang; yang dibutuhkan di sini
+		// perhatian manusia, bukan blokir.
+		{
+			// Kiriman yang ditolak nginx karena terlalu besar. Pengunjung biasa
+			// hampir tidak pernah mengalaminya dua kali; tiga kali dalam lima
+			// menit dari IP yang sama adalah orang yang menguji batasnya.
+			ID: "rule_oversized_body", Name: "Kiriman Terlalu Besar Berulang", Category: "oversized_body",
+			Severity: "medium", Score: 10, Threshold: 30, Mitre: "T1190",
+			Isolated:   true,
+			Conditions: Conditions{Source: "web_log", StatusMin: 413, StatusMax: 413, PerIP: true, WindowSeconds: 300},
+		},
+		{
+			// POST yang berulang kali membuat aplikasi galat 500: pola menebak
+			// kiriman sampai memori atau state PHP rusak.
+			ID: "rule_post_500_storm", Name: "Rentetan Galat 500 pada POST", Category: "server_error_storm",
+			Severity: "high", Score: 1, Threshold: 15, Mitre: "T1190",
+			Isolated:   true,
+			Conditions: Conditions{Source: "web_log", Method: "POST", StatusMin: 500, StatusMax: 500, PerIP: true, WindowSeconds: 60},
+		},
+		{
+			// 502 = worker PHP-FPM mati di tengah permintaan (segfault,
+			// "exited on signal 11"). Dihitung per IP supaya deploy ulang,
+			// yang membagi 502 ke banyak pengunjung, tidak ikut terhitung.
+			ID: "rule_php_worker_crash", Name: "Worker PHP Tumbang Berulang", Category: "php_worker_crash",
+			Severity: "high", Score: 1, Threshold: 10, Mitre: "T1499.004",
+			Isolated:   true,
+			Conditions: Conditions{Source: "web_log", StatusMin: 502, StatusMax: 502, PerIP: true, WindowSeconds: 60},
+		},
 		{
 			ID: "rule_ssh_brute", Name: "SSH Brute Force", Category: "brute_force",
 			Severity: "high", Score: 5, Threshold: 50, Mitre: "T1110.001",

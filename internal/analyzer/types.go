@@ -46,24 +46,36 @@ type Evidence struct {
 
 // Rule defines a detection rule loaded from YAML.
 type Rule struct {
-	ID          string      `yaml:"id"`
-	Name        string      `yaml:"name"`
-	Category    string      `yaml:"category"`
-	Severity    string      `yaml:"severity"`
-	Score       int         `yaml:"score"`
-	Threshold   int         `yaml:"threshold"`
-	Mitre       string      `yaml:"mitre"` // MITRE ATT&CK technique ID, e.g. "T1110" or "T1505.003"
-	Conditions  Conditions  `yaml:"conditions"`
+	ID         string     `yaml:"id"`
+	Name       string     `yaml:"name"`
+	Category   string     `yaml:"category"`
+	Severity   string     `yaml:"severity"`
+	Score      int        `yaml:"score"`
+	Threshold  int        `yaml:"threshold"`
+	Mitre      string     `yaml:"mitre"` // MITRE ATT&CK technique ID, e.g. "T1110" or "T1505.003"
+	Conditions Conditions `yaml:"conditions"`
+
+	// Isolated: dihitung di jendelanya sendiri (Conditions.WindowSeconds, per
+	// IP, per aturan) dan TIDAK ikut skor bersama maupun korelasi
+	// exploit_chain.
+	//
+	// Skor bersama menjumlahkan semua aturan per IP sampai IP itu diam 5
+	// menit, sehingga pengunjung aktif pelan-pelan "mengumpulkan" skor dari
+	// rule_request_flood. Aturan berambang rendah (413/500/502 berulang)
+	// akan menyala dari satu kejadian saja, lalu bergabung dengan 4xx_storm
+	// dan request_flood menjadi exploit_chain critical yang diblokir otomatis.
+	// Diuji: tiga kali unggah foto terlalu besar sudah cukup.
+	Isolated bool `yaml:"isolated"`
 }
 
 type Conditions struct {
 	Source        string   `yaml:"source"` // web_log | ssh_log
 	PerIP         bool     `yaml:"per_ip"`
 	WindowSeconds int      `yaml:"window_seconds"`
-	Method        string   `yaml:"method"`        // POST, GET, etc.
+	Method        string   `yaml:"method"` // POST, GET, etc.
 	PathEquals    []string `yaml:"path_equals"`
 	PathContains  []string `yaml:"path_contains"`
-	PathRegex     []string `yaml:"path_regex"`    // regex matched against full path
+	PathRegex     []string `yaml:"path_regex"` // regex matched against full path
 	QueryRegex    []string `yaml:"query_regex"`
 	UAContains    []string `yaml:"ua_contains"`
 	EventType     string   `yaml:"event_type"` // for SSH: "failed" | "root_accepted"

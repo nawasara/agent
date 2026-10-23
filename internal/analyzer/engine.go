@@ -12,16 +12,37 @@ import (
 
 // Engine matches collector events against rules and emits Incidents.
 type Engine struct {
-	rules     []Rule
-	window    *IPWindow
-	incidentC chan<- Incident
+	rules      []Rule
+	window     *IPWindow
+	ruleWindow *RuleWindow
+	incidentC  chan<- Incident
 }
 
 func NewEngine(rules []Rule, correlationWindow time.Duration, incidentC chan<- Incident) *Engine {
 	return &Engine{
-		rules:     rules,
-		window:    NewIPWindow(correlationWindow),
-		incidentC: incidentC,
+		rules:      rules,
+		window:     NewIPWindow(correlationWindow),
+		ruleWindow: NewRuleWindow(),
+		incidentC:  incidentC,
+	}
+}
+
+// addIsolated menghitung aturan Isolated di jendelanya sendiri dan
+// mengeluarkan insiden tanpa korelasi. Lihat Rule.Isolated.
+func (e *Engine) addIsolated(ip string, rule Rule, ev Evidence) {
+	window := time.Duration(rule.Conditions.WindowSeconds) * time.Second
+	if window <= 0 {
+		window = 60 * time.Second
+	}
+	key := rule.ID + "|" + ip
+	count, evidence := e.ruleWindow.Add(key, window, ev)
+	threshold := rule.Threshold
+	if threshold == 0 {
+		threshold = 20
+	}
+	if count*rule.Score >= threshold {
+		e.emit(ip, rule, evidence, []string{rule.Category})
+		e.ruleWindow.Reset(key)
 	}
 }
 
@@ -34,6 +55,10 @@ func (e *Engine) ProcessLog(entry *collector.LogEntry) {
 			continue
 		}
 		ev := Evidence{Timestamp: entry.Timestamp, Host: entry.Host, Raw: entry.Raw, MatchedRule: rule.ID}
+		if rule.Isolated {
+			e.addIsolated(entry.SourceIP, rule, ev)
+			continue
+		}
 		threshold := rule.Threshold
 		if threshold == 0 {
 			threshold = 20
